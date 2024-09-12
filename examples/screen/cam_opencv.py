@@ -170,9 +170,20 @@ def display_images(queue: Queue):
     while True:
         if not queue.empty():
             img_tensor = queue.get()
-            img = PIL.Image.fromarray(img_tensor.numpy().transpose(1, 2, 0).astype('uint8'))
-            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+            # 生成されたテンソルの形状を確認 (通常は (channels, height, width) )
+            if img_tensor.ndim == 3:
+                img_tensor = img_tensor.permute(1, 2, 0)  # (height, width, channels)に変換
+
+            # 値の範囲が[-1, 1]でなく[0, 255]にするための変換
+            img_array = ((img_tensor.numpy() + 1) * 127.5).astype('uint8')
+
+            # PILからOpenCVのフォーマットに変換
+            img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+            # 画像を表示
             cv2.imshow('Generated Image', img_cv)
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
