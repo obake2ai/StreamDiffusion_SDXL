@@ -38,7 +38,7 @@ def camera_feed(event: threading.Event, height: int = 720, width: int = 1280):
             print("failed to grab frame")
             break
         img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        img = img.resize((width, height))
+        img = img.resize((width, height))  # widthとheightをカメラの解像度に合わせてリサイズ
         inputs.append(pil2tensor(img))
 
     cap.release()
@@ -118,9 +118,9 @@ def image_generation_process(
     frame_buffer_size : int, optional
         The frame buffer size for denoising batch, by default 1.
     width : int, optional
-        The width of the image, by default 512.
+        The width of the image.
     height : int, optional
-        The height of the image, by default 512.
+        The height of the image.
     acceleration : Literal["none", "xformers", "tensorrt"], optional
         The acceleration method, by default "tensorrt".
     use_denoising_batch : bool, optional
@@ -149,13 +149,14 @@ def image_generation_process(
     """
 
     global inputs
+    # ここでwidthとheightを引き継ぎ、StreamDiffusionWrapperで使用
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
         t_index_list=[32, 45],
         frame_buffer_size=frame_buffer_size,
-        width=width,
-        height=height,
+        width=width,  # widthを正しく指定
+        height=height,  # heightを正しく指定
         warmup=10,
         acceleration=acceleration,
         do_add_noise=do_add_noise,
@@ -179,7 +180,7 @@ def image_generation_process(
     monitor = monitor_receiver.recv()
 
     event = threading.Event()
-    input_screen = threading.Thread(target=camera_feed, args=(event, height, width))  # 変更: screen関数をcamera_feedに置き換え
+    input_screen = threading.Thread(target=camera_feed, args=(event, height, width))  # camera_feedでheightとwidthを引き継ぎ
     input_screen.start()
     time.sleep(5)
 
@@ -218,11 +219,11 @@ def image_generation_process(
 def main(
     model_id_or_path: str = "KBlueLeaf/kohaku-v2.1",
     lora_dict: Optional[Dict[str, float]] = None,
-    prompt: str = "alien, sci-fi, photoreal, reslistic",
+    prompt: str = "alien, sci-fi, photoreal, realistic",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
-    width: int = 1280,
-    height: int = 720,
+    width: int = 1280,  # 高解像度に設定
+    height: int = 720,  # 高解像度に設定
     acceleration: Literal["none", "xformers", "tensorrt"] = "xformers",
     use_denoising_batch: bool = True,
     seed: int = 2,
