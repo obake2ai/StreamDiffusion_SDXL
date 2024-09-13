@@ -91,7 +91,8 @@ def calculate_t_index_list(num_inference_steps: int, original_steps: int = 50, o
     return [int((t / original_steps) * num_inference_steps) for t in original_t_index_list]
 
 # 動的に t_index_list を計算
-dynamic_t_index_list = calculate_t_index_list(num_inference_steps=8)
+num_inference_steps = 8
+dynamic_t_index_list = calculate_t_index_list(num_inference_steps=num_inference_steps)
 
 def image_generation_process(
     queue: Queue,
