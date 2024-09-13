@@ -173,7 +173,7 @@ def image_generation_process(
     stream.prepare(
         prompt=prompt,
         negative_prompt=negative_prompt,
-        num_inference_steps=50,
+        num_inference_steps=8,
         guidance_scale=guidance_scale,
         delta=delta,
     )
