@@ -218,7 +218,7 @@ def image_generation_process(
 
 def main(
     model_id_or_path: str = "KBlueLeaf/kohaku-v2.1",
-    lora_dict: Optional[Dict[str, float]] = {"xshingoboy.safetensors":1.0},
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors":1.0},
     prompt: str = "xshingo",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
