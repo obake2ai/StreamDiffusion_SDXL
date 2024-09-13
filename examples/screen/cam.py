@@ -22,7 +22,7 @@ inputs = []
 top = 0
 left = 0
 
-def camera_feed(event: threading.Event, height: int = 720, width: int = 1280):
+def camera_feed(event: threading.Event, height: int = 512, width: int = 512):
     """
     カメラから画像を取得し、ストリーミングする関数
     """

@@ -22,8 +22,7 @@ def update_image(image_data: Image.Image, label: tk.Label) -> None:
     label : tk.Label
         The labels where the image will be updated.
     """
-    width = 1280
-    height = 720
+    width, height = image_data.size
     tk_image = ImageTk.PhotoImage(image_data, size=width)
     label.configure(image=tk_image, width=width, height=height)
     label.image = tk_image  # keep a reference
