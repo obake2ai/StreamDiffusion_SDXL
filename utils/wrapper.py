@@ -364,6 +364,7 @@ class StreamDiffusionWrapper:
         t_index_list: List[int],
         lora_dict: Optional[Dict[str, float]] = None,
         lcm_lora_id: Optional[str] = None,
+        lora_id: Optional[str] = None,
         vae_id: Optional[str] = None,
         acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
         warmup: int = 10,
