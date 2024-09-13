@@ -90,10 +90,6 @@ def calculate_t_index_list(num_inference_steps: int, original_steps: int = 50, o
     """
     return [int((t / original_steps) * num_inference_steps) for t in original_t_index_list]
 
-# 動的に t_index_list を計算
-num_inference_steps = 8
-dynamic_t_index_list = calculate_t_index_list(num_inference_steps=num_inference_steps)
-
 def image_generation_process(
     queue: Queue,
     fps_queue: Queue,
@@ -171,6 +167,10 @@ def image_generation_process(
 
     global inputs
 
+    # 動的に t_index_list を計算
+    num_inference_steps = 30
+    dynamic_t_index_list = calculate_t_index_list(num_inference_steps=num_inference_steps)
+
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
@@ -241,7 +241,7 @@ def image_generation_process(
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-xl-v2-turbo",
     lora_dict: Optional[Dict[str, float]] = None,
-    prompt: str = "alien, sci-fi, photoreal, realistic",
+    prompt: str = "Realistic, futuristic, simple, sophoscated, organic, slime mold, divine android, standing, ((xbosatsu)), mythology, A beautiful and pristine android body, scupture, mysterious, profoundly beautiful, revealing the faint glow beneath",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
     width: int = 1280,  # 高解像度に設定
@@ -250,7 +250,7 @@ def main(
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "self",
-    guidance_scale: float = 1.4,
+    guidance_scale: float = 2.4,
     delta: float = 0.5,
     do_add_noise: bool = False,
     enable_similar_image_filter: bool = True,
