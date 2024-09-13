@@ -173,7 +173,7 @@ def image_generation_process(
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
-        t_index_list=dynamic_t_index_list,,
+        t_index_list=dynamic_t_index_list,
         frame_buffer_size=frame_buffer_size,
         width=width,  # widthを正しく指定
         height=height,  # heightを正しく指定
