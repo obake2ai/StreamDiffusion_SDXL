@@ -168,7 +168,7 @@ def image_generation_process(
     global inputs
 
     # 動的に t_index_list を計算
-    num_inference_steps = 30
+    num_inference_steps = 50
     dynamic_t_index_list = calculate_t_index_list(num_inference_steps=num_inference_steps)
 
     stream = StreamDiffusionWrapper(
