@@ -70,6 +70,29 @@ def monitor_setting_process(
     monitor = dummy_screen(width, height)
     monitor_sender.send(monitor)
 
+def calculate_t_index_list(num_inference_steps: int, original_steps: int = 50, original_t_index_list: List[int] = [32, 45]) -> List[int]:
+    """
+    num_inference_steps に基づいて動的に t_index_list を生成する関数。
+
+    Parameters
+    ----------
+    num_inference_steps : int
+        現在の推論ステップ数。
+    original_steps : int
+        元々の推論ステップ数 (デフォルトは 50)。
+    original_t_index_list : List[int]
+        元々の t_index_list (デフォルトは [32, 45])。
+
+    Returns
+    -------
+    List[int]
+        num_inference_steps に基づいた t_index_list。
+    """
+    return [int((t / original_steps) * num_inference_steps) for t in original_t_index_list]
+
+# 動的に t_index_list を計算
+dynamic_t_index_list = calculate_t_index_list(num_inference_steps=8)
+
 def image_generation_process(
     queue: Queue,
     fps_queue: Queue,
@@ -150,7 +173,7 @@ def image_generation_process(
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
-        t_index_list = [i for i in range(min(len(stream.timesteps), 8))],
+        t_index_list=dynamic_t_index_list,,
         frame_buffer_size=frame_buffer_size,
         width=width,  # widthを正しく指定
         height=height,  # heightを正しく指定
@@ -170,7 +193,7 @@ def image_generation_process(
     stream.prepare(
         prompt=prompt,
         negative_prompt=negative_prompt,
-        num_inference_steps=8,
+        num_inference_steps=num_inference_steps,
         guidance_scale=guidance_scale,
         delta=delta,
     )
