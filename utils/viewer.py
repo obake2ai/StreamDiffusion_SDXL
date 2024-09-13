@@ -22,8 +22,8 @@ def update_image(image_data: Image.Image, label: tk.Label) -> None:
     label : tk.Label
         The labels where the image will be updated.
     """
-    width = 512
-    height = 512
+    width = 1280
+    height = 720
     tk_image = ImageTk.PhotoImage(image_data, size=width)
     label.configure(image=tk_image, width=width, height=height)
     label.image = tk_image  # keep a reference
@@ -95,4 +95,3 @@ def receive_images(queue: Queue, fps_queue: Queue) -> None:
         root.mainloop()
     except KeyboardInterrupt:
         return
-
