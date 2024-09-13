@@ -218,8 +218,8 @@ def image_generation_process(
 
 def main(
     model_id_or_path: str = "Lykon/AnyLoRA",
-    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingogirl-000001.safetensors":1.0},
-    prompt: str = "xshingo",
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors":1.0},
+    prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
     width: int = 512,  # 高解像度に設定
