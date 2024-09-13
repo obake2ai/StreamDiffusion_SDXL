@@ -244,8 +244,8 @@ def main(
     prompt: str = "Realistic, futuristic, simple, sophoscated, organic, slime mold, divine android, standing, ((xbosatsu)), mythology, A beautiful and pristine android body, scupture, mysterious, profoundly beautiful, revealing the faint glow beneath",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
-    width: int = 1280,  # 高解像度に設定
-    height: int = 720,  # 高解像度に設定
+    width: int = 512,  # 高解像度に設定
+    height: int = 512,  # 高解像度に設定
     acceleration: Literal["none", "xformers", "tensorrt"] = "xformers",
     use_denoising_batch: bool = True,
     seed: int = 2,
