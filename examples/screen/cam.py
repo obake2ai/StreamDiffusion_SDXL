@@ -219,7 +219,7 @@ def image_generation_process(
 def main(
     model_id_or_path: str = "KBlueLeaf/kohaku-v2.1",
     lora_dict: Optional[Dict[str, float]] = None,
-    prompt: str = "alien, sci-fi, photoreal, realistic",
+    prompt: str = "Realistic, futuristic, simple, sophoscated, organic, slime mold, divine android, standing, ((xbosatsu)), mythology, A beautiful and pristine android body, scupture, mysterious, profoundly beautiful, revealing the faint glow beneath",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
     width: int = 1280,  # 高解像度に設定
