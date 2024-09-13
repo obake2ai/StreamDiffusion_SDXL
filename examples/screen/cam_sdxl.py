@@ -23,9 +23,6 @@ top = 0
 left = 0
 
 def camera_feed(event: threading.Event, height: int = 512, width: int = 512):
-    """
-    カメラから画像を取得し、ストリーミングする関数
-    """
     global inputs
     cap = cv2.VideoCapture(0)  # /dev/video0に対応するカメラデバイスを指定
 
@@ -149,11 +146,11 @@ def image_generation_process(
     """
 
     global inputs
-    # ここでwidthとheightを引き継ぎ、StreamDiffusionWrapperで使用
+
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
-        t_index_list=[32, 45],
+        t_index_list = [i for i in range(min(len(self.timesteps), 8))],
         frame_buffer_size=frame_buffer_size,
         width=width,  # widthを正しく指定
         height=height,  # heightを正しく指定
