@@ -217,7 +217,7 @@ def image_generation_process(
     print(f"fps: {fps}")
 
 def main(
-    model_id_or_path: str = "stabilityai/stable-diffusion-2-1-base",
+    model_id_or_path: str = "Lykon/AnyLoRA",
     lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingogirl-000001.safetensors":1.0},
     prompt: str = "xshingo",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
