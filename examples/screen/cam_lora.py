@@ -22,7 +22,7 @@ inputs = []
 top = 0
 left = 0
 
-def camera_feed(event: threading.Event, height: int = 512, width: int = 512):
+def camera_feed(event: threading.Event, height: int = 512, width: int = 512, convert_to_grayscale: bool = False):
     """
     カメラから画像を取得し、ストリーミングする関数
     """
@@ -37,6 +37,12 @@ def camera_feed(event: threading.Event, height: int = 512, width: int = 512):
         if not ret:
             print("failed to grab frame")
             break
+
+        if convert_to_grayscale:
+            # Convert to grayscale and then back to 3-channel image
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+
         img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         img = img.resize((width, height))  # widthとheightをカメラの解像度に合わせてリサイズ
         inputs.append(pil2tensor(img))
@@ -180,7 +186,8 @@ def image_generation_process(
     monitor = monitor_receiver.recv()
 
     event = threading.Event()
-    input_screen = threading.Thread(target=camera_feed, args=(event, height, width))  # camera_feedでheightとwidthを引き継ぎ
+    input_screen = threading.Thread(target=camera_feed, args=(event, height, width, convert_to_grayscale=True))  # Enable grayscale
+
     input_screen.start()
     time.sleep(5)
 
