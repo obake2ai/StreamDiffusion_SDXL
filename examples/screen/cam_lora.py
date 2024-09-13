@@ -225,12 +225,12 @@ def image_generation_process(
 
 def main(
     model_id_or_path: str = "Lykon/AnyLoRA",
-    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingogirl.safetensors":1.0},
-    prompt: str = "xshingogirl",
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors":1.0},
+    prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
-    width: int = 512,  # 高解像度に設定
-    height: int = 512,  # 高解像度に設定
+    width: int = 1280,  # 高解像度に設定
+    height: int = 720,  # 高解像度に設定
     acceleration: Literal["none", "xformers", "tensorrt"] = "xformers",
     use_denoising_batch: bool = True,
     seed: int = 2,
