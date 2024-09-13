@@ -150,7 +150,7 @@ def image_generation_process(
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
-        t_index_list = [i for i in range(min(len(self.timesteps), 8))],
+        t_index_list = [i for i in range(min(len(stream.timesteps), 8))],
         frame_buffer_size=frame_buffer_size,
         width=width,  # widthを正しく指定
         height=height,  # heightを正しく指定
