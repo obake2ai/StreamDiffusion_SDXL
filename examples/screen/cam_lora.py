@@ -186,7 +186,7 @@ def image_generation_process(
     monitor = monitor_receiver.recv()
 
     event = threading.Event()
-    input_screen = threading.Thread(target=camera_feed, args=(event, height, width, convert_to_grayscale=True))  # Enable grayscale
+    input_screen = threading.Thread(target=camera_feed, args=(event, height, width, True))  # Enable grayscale
 
     input_screen.start()
     time.sleep(5)
