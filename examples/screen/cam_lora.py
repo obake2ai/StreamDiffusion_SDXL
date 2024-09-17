@@ -28,6 +28,9 @@ def video_feed(event: threading.Event, video_path: str, height: int = 512, width
     """
     global inputs
     cap = cv2.VideoCapture(video_path)  # 動画ファイルを指定
+    if not cap.isOpened():
+        print(f"Error: Could not open video file {video_path}")
+        return
 
     while True:
         if event.is_set():
@@ -50,7 +53,6 @@ def video_feed(event: threading.Event, video_path: str, height: int = 512, width
 
     cap.release()
     print('exit: video_feed')
-
 
 def camera_feed(event: threading.Event, height: int = 512, width: int = 512, convert_to_grayscale: bool = False, video_path: Optional[str] = None):
     """
@@ -225,7 +227,7 @@ def main(
     enable_similar_image_filter: bool = True,
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
-    video_path: Optional[str] = "assets/0710_MPtestsozai.mp4",  # 動画ファイルのパスを追加
+    video_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",  # 動画ファイルのパスを追加
 ) -> None:
     """
     メイン関数。画像生成とビューアープロセスを開始します。
