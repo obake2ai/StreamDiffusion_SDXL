@@ -227,7 +227,7 @@ def main(
     enable_similar_image_filter: bool = True,
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
-    video_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",  # 動画ファイルのパスを追加
+    video_path: Optional[str] = "./assets/converted_video.mp4",  # 動画ファイルのパスを追加
 ) -> None:
     """
     メイン関数。画像生成とビューアープロセスを開始します。
