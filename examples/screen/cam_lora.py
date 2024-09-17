@@ -238,4 +238,65 @@ def main(
     monitor_sender, monitor_receiver = ctx.Pipe()
 
     process1 = ctx.Process(
-        target=image_generation
+        target=image_generation_process,
+        args=(
+            queue,
+            fps_queue,
+            close_queue,
+            model_id_or_path,
+            lora_dict,
+            prompt,
+            negative_prompt,
+            frame_buffer_size,
+            width,
+            height,
+            acceleration,
+            use_denoising_batch,
+            seed,
+            cfg_type,
+            guidance_scale,
+            delta,
+            do_add_noise,
+            enable_similar_image_filter,
+            similar_image_filter_threshold,
+            similar_image_filter_max_skip_frame,
+            monitor_receiver,
+            ),
+    )
+    process1.start()
+
+    monitor_process = ctx.Process(
+        target=monitor_setting_process,
+        args=(
+            width,
+            height,
+            monitor_sender,
+            ),
+    )
+    monitor_process.start()
+    monitor_process.join()
+
+    event = threading.Event()
+    input_screen = threading.Thread(target=camera_feed, args=(event, height, width, True, video_path))  # video_pathを渡す
+    input_screen.start()
+
+    process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
+    process2.start()
+
+    # 終了処理
+    process2.join()
+    print("process2 terminated.")
+    close_queue.put(True)
+    print("process1 terminating...")
+    process1.join(5) # タイムアウト付き
+    if process1.is_alive():
+        print("process1 still alive. force killing...")
+        process1.terminate() # 強制終了
+    process1.join()
+    print("process1 terminated.")
+    event.set()  # キャプチャスレッドを停止
+    input_screen.join()
+
+
+if __name__ == "__main__":
+    fire.Fire(main)
