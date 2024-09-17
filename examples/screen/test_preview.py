@@ -5,9 +5,10 @@ import torch
 import PIL.Image
 from multiprocessing import Process, Queue, get_context
 from streamdiffusion.image_utils import pil2tensor
-from utils.wrapper import StreamDiffusionWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+from utils.wrapper import StreamDiffusionWrapper
 
 # 動画のプレビューおよび画像生成の組み込み
 def image_generation_process(queue, model_id_or_path, prompt, negative_prompt, width, height):
