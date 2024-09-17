@@ -54,6 +54,7 @@ def video_feed(event: threading.Event, video_path: str, height: int = 512, width
     cap.release()
     print('exit: video_feed')
 
+
 def camera_feed(event: threading.Event, height: int = 512, width: int = 512, convert_to_grayscale: bool = False, video_path: Optional[str] = None):
     """
     カメラから画像を取得し、ストリーミングする関数
