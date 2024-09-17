@@ -1,3 +1,26 @@
+import os
+import sys
+import time
+import threading
+from multiprocessing import Process, Queue, get_context
+from multiprocessing.connection import Connection
+from typing import List, Literal, Dict, Optional
+import torch
+import PIL.Image
+from streamdiffusion.image_utils import pil2tensor
+import mss
+import fire
+import tkinter as tk
+import cv2  # 追加: OpenCVを使用してカメラからの画像を取得
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+from utils.viewer import receive_images
+from utils.wrapper import StreamDiffusionWrapper
+
+inputs = []
+top = 0
+left = 0
 def video_feed(event: threading.Event, video_path: str, height: int = 512, width: int = 512, convert_to_grayscale: bool = False):
     """
     動画から画像を取得し、ストリーミングする関数
