@@ -1,3 +1,5 @@
+import os
+import sys
 import cv2
 import threading
 import time
@@ -5,6 +7,9 @@ import torch
 import PIL.Image
 from multiprocessing import Process, Queue, get_context
 from streamdiffusion.image_utils import pil2tensor
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 from utils.wrapper import StreamDiffusionWrapper
 
 def image_generation_process(queue, model_id_or_path, prompt, negative_prompt, width, height):
