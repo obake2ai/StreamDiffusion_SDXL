@@ -6,6 +6,7 @@ import PIL.Image
 from multiprocessing import Process, Queue, get_context
 from streamdiffusion.image_utils import pil2tensor
 import sys
+import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
