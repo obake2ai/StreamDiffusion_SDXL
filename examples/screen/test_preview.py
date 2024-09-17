@@ -5,14 +5,8 @@ import torch
 import PIL.Image
 from multiprocessing import Process, Queue, get_context
 from streamdiffusion.image_utils import pil2tensor
-import sys
-import os
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-
 from utils.wrapper import StreamDiffusionWrapper
 
-# 動画のプレビューおよび画像生成の組み込み
 def image_generation_process(queue, model_id_or_path, prompt, negative_prompt, width, height):
     # StreamDiffusionWrapper の設定
     stream = StreamDiffusionWrapper(
@@ -92,7 +86,7 @@ def preview_video_with_generation(video_path, model_id_or_path, prompt, negative
         # 生成された画像を取得
         if not queue.empty():
             output_image = queue.get()
-            output_image = output_image.permute(1, 2, 0).numpy()
+            output_image = output_image.permute(1, 2, 0).numpy()  # バッチ次元を取り除く
             output_image = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
             cv2.imshow('Generated Video Preview', output_image)
 
@@ -105,10 +99,11 @@ def preview_video_with_generation(video_path, model_id_or_path, prompt, negative
     cv2.destroyAllWindows()
     process.terminate()
 
-# テスト用の動画ファイルのパスを指定
-video_path = 'assets/0710_MPtestsozai.mp4'
-model_id_or_path = "Lykon/AnyLoRA"  # モデルIDまたはパス
-prompt = "xshingoboy"
-negative_prompt = "low quality, bad quality, blurry, low resolution"
+if __name__ == '__main__':
+    # テスト用の動画ファイルのパスを指定
+    video_path = 'assets/0710_MPtestsozai.mp4'
+    model_id_or_path = "Lykon/AnyLoRA"  # モデルIDまたはパス
+    prompt = "xshingoboy"
+    negative_prompt = "low quality, bad quality, blurry, low resolution"
 
-preview_video_with_generation(video_path, model_id_or_path, prompt, negative_prompt)
+    preview_video_with_generation(video_path, model_id_or_path, prompt, negative_prompt)
