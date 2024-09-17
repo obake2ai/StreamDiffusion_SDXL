@@ -106,7 +106,7 @@ def preview_video_with_generation(video_path, model_id_or_path, prompt, negative
 
 if __name__ == '__main__':
     # テスト用の動画ファイルのパスを指定
-    video_path = 'assets/0710_MPtestsozai.mp4'
+    video_path = './assets/0710_MPtestsozai.mp4'
     model_id_or_path = "Lykon/AnyLoRA"  # モデルIDまたはパス
     prompt = "xshingoboy"
     negative_prompt = "low quality, bad quality, blurry, low resolution"
