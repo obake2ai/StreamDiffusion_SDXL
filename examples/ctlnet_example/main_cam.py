@@ -7,30 +7,27 @@ import numpy as np
 
 from multiprocessing import Process, Queue, get_context
 from multiprocessing.connection import Connection
-from typing import List, Literal, Dict, Optional
 import torch
 import PIL.Image
 import mss
 import fire
 import tkinter as tk
-import cv2  # 追加
+import cv2
+
+from screeninfo import get_monitors  # 追加
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from utils.viewer import receive_images
 from utils.wrapper import StreamDiffusionWrapper
 
-import torch
-from diffusers import AutoencoderTiny, StableDiffusionPipeline, ControlNetModel, StableDiffusionControlNetPipeline, StableDiffusionImg2ImgPipeline
+from diffusers import AutoencoderTiny, StableDiffusionPipeline, ControlNetModel, StableDiffusionControlNetPipeline
 from diffusers.utils import load_image
 
 from streamdiffusion import StreamDiffusion
 from streamdiffusion.image_utils import postprocess_image
 from my_image_utils import pil2tensor
-from diffusers.utils import load_image
 from transformers import CLIPVisionModelWithProjection
-import torch
-from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusionInpaintPipelineLegacy, DDIMScheduler, AutoencoderKL
 from PIL import Image
 
 ###############################################
@@ -88,7 +85,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             self.guidance_scale = guidance_scale
         self.delta = delta
         self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
-        ##IPAdapterのため
+        # IPAdapterのため
         if self.ip_adapter:
             ip_adapter_image = ip_adapter_image.resize((self.height, self.width))
 
@@ -123,7 +120,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             num_images_per_prompt=1,
             do_classifier_free_guidance=self.do_classifier_free_guidance,
             negative_prompt=negative_prompt,
-            # lora_scale=lora_scale,
         )
         self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
 
@@ -142,7 +138,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         if self.ip_adapter:
             # IPADAPTER ORIGINAL IMPL
             image_embeds = image_embeds.repeat(self.batch_size, 1, 1)
-            # image_embeds = image_embeds.repeat(4, 1, 1)
             if self.do_classifier_free_guidance:
                 negative_image_embeds = negative_image_embeds.repeat(self.batch_size, 1, 1)
 
@@ -235,11 +230,10 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
             x_t_latent_plus_uc = torch.concat([x_t_latent, x_t_latent], dim=0)
             t_list = torch.concat([t_list, t_list], dim=0)
-            # image = torch.concat([image, image], dim=0)
         else:
             x_t_latent_plus_uc = x_t_latent
-        # print(image.shape)
-        latent_model_input = x_t_latent_plus_uc  # self.do_classifier_free_guidance
+
+        latent_model_input = x_t_latent_plus_uc
         controlnet_prompt_embeds = self.prompt_embeds
         control_model_input = latent_model_input
         down_block_res_samples, mid_block_res_sample = self.controlnet(
@@ -247,8 +241,8 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             t_list,
             encoder_hidden_states=controlnet_prompt_embeds,
             controlnet_cond=image,
-            conditioning_scale=1,  # cond_scale,
-            guess_mode=False,  # guess_mode,
+            conditioning_scale=1,
+            guess_mode=False,
             return_dict=False,
         )
 
@@ -266,7 +260,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             noise_pred_text = model_pred[1:]
             self.stock_noise = torch.concat(
                 [model_pred[0:1], self.stock_noise[1:]], dim=0
-            )  # ここコメントアウトでself out cfg
+            )
         elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
             noise_pred_uncond, noise_pred_text = model_pred.chunk(2)
         else:
@@ -310,7 +304,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 self.stock_noise = init_noise + delta_x
 
         else:
-            # denoised_batch = self.scheduler.step(model_pred, t_list[0], x_t_latent).denoised
             denoised_batch = self.scheduler_step_batch(model_pred, x_t_latent, idx)
 
         return denoised_batch, model_pred
@@ -381,7 +374,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                         self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
                     )
                 if self.cfg_type == "full":
-                    self.ctl_image_t_buffer = images[:-2]  # TODO 後ろ２つでいいのか？
+                    self.ctl_image_t_buffer = images[:-2]
                 else:
                     self.ctl_image_t_buffer = images[:-1]
             else:
@@ -490,8 +483,6 @@ def screen(
             fps_interval = 1.0 / UPEER_FPS
             if interval < fps_interval:
                 sleep_time = fps_interval - interval
-                # print("screen:{}".format(sleep_time))
-
                 time.sleep(sleep_time)
 
     print('exit : screen')
@@ -501,6 +492,7 @@ def camera(
     event: threading.Event(),
     height: int = 512,
     width: int = 512,
+    monitor_info: Dict[str, Any] = None,  # 追加
 ):
     global inputs
 
@@ -508,6 +500,16 @@ def camera(
     if not cap.isOpened():
         print("Cannot open camera")
         return
+
+    # カメラウィンドウを設定
+    cv2.namedWindow("Camera Input", cv2.WINDOW_NORMAL)
+    if monitor_info:
+        # ウィンドウを別モニターに移動
+        monitor_x = monitor_info['left']
+        monitor_y = monitor_info['top']
+        cv2.moveWindow("Camera Input", monitor_x, monitor_y)
+        # ウィンドウサイズをモニターサイズに合わせる
+        cv2.resizeWindow("Camera Input", monitor_info['width'], monitor_info['height'])
 
     try:
         while True:
@@ -520,6 +522,11 @@ def camera(
             ret, frame = cap.read()
             if not ret:
                 print("Can't receive frame (stream end?). Exiting ...")
+                break
+
+            # カメラ入力を表示
+            cv2.imshow("Camera Input", frame)
+            if cv2.waitKey(1) == ord('q'):
                 break
 
             # Convert the frame (numpy array) to PIL Image
@@ -542,6 +549,7 @@ def camera(
                 time.sleep(sleep_time)
     finally:
         cap.release()
+        cv2.destroyWindow("Camera Input")
         print('exit : camera')
 
 
@@ -606,8 +614,18 @@ def monitor_setting_process(
     height: int,
     monitor_sender: Connection,
 ) -> None:
-    monitor = dummy_screen(width, height)
-    monitor_sender.send(monitor)
+    # すべてのモニター情報を取得
+    monitors = get_monitors()
+    monitor_list = []
+    for m in monitors:
+        monitor_list.append({
+            "id": m.name,
+            "width": m.width,
+            "height": m.height,
+            "left": m.x,
+            "top": m.y
+        })
+    monitor_sender.send(monitor_list)
 
 
 base_img = None
@@ -638,11 +656,7 @@ def image_generation_process(
     prompt_queue
 ) -> None:
     """
-    Process for generating images based on a prompt using a specified model.
-
-    Parameters
-    ----------
-    （パラメータの説明は省略）
+    画像生成プロセスの関数
     """
 
     global inputs
@@ -655,12 +669,7 @@ def image_generation_process(
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
     t_index_list = [0, 16, 32, 45]
-    # t_index_list=[0, 30, 45]
-    # t_index_list=[0,10,20,30,40]
     cfg_type = "none"
-    # cfg_type="full" #一応動くが・・・
-    # RCFG系は非対応
-
     delta = 1.0
 
     # Trueで潜在空間の乱数を固定します。
@@ -697,7 +706,7 @@ def image_generation_process(
         pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models",
                              weight_name="ip-adapter_sd15.bin",
                              torch_dtype=torch.float16)
-        pipe.set_ip_adapter_scale(0.8)
+        pipe.set_ip_adapter_scale(1.0)
 
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
@@ -710,15 +719,12 @@ def image_generation_process(
         ip_adapter=adapter
     )
 
-    # 読み込んだモデルがLCMでなければマージする
-    pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")  # Stable  Diffusion 1.5 のLCM LoRA
+    # LoRAの読み込み
+    pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")
     pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
 
     # Tiny VAEで高速化
     stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
-
-    # xformersで高速化 ip adapter が効かなくなるので無効にする
-    # pipe.enable_xformers_memory_efficient_attention()
 
     ip_adapter_image = None
     if adapter:
@@ -744,15 +750,27 @@ def image_generation_process(
         camera_connected = False
 
     if not camera_connected:
-        monitor = monitor_receiver.recv()
+        monitor_list = monitor_receiver.recv()
+        # メインモニター以外を選択（ここでは2番目のモニターを使用）
+        if len(monitor_list) > 1:
+            monitor_info = monitor_list[1]  # 2番目のモニター
+        else:
+            monitor_info = monitor_list[0]  # メインモニター
+    else:
+        monitor_list = monitor_receiver.recv()
+        # カメラ入力を表示するモニターを選択（ここでは2番目のモニターを使用）
+        if len(monitor_list) > 1:
+            monitor_info = monitor_list[1]  # 2番目のモニター
+        else:
+            monitor_info = monitor_list[0]  # メインモニター
 
     event = threading.Event()
     event.clear()
 
     if camera_connected:
-        input_thread = threading.Thread(target=camera, args=(event, height, width))
+        input_thread = threading.Thread(target=camera, args=(event, height, width, monitor_info))
     else:
-        input_thread = threading.Thread(target=screen, args=(event, height, width, monitor))
+        input_thread = threading.Thread(target=screen, args=(event, height, width, monitor_info))
 
     input_thread.start()
     time.sleep(1)
@@ -778,8 +796,6 @@ def image_generation_process(
             prompt_change = False
             if current_prompt != new_prompt:
                 current_prompt = new_prompt
-                #    print("change",current_prompt,new_prompt)
-
                 stream.update_prompt(current_prompt, negative_prompt)
                 prompt_change = True
 
@@ -821,7 +837,7 @@ def main(
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "none",
-    guidance_scale: float = 1.0,
+    guidance_scale: float = 1.4,
     delta: float = 0.5,
     do_add_noise: bool = False,
     enable_similar_image_filter: bool = True,
@@ -829,7 +845,7 @@ def main(
     similar_image_filter_max_skip_frame: float = 10,
 ) -> None:
     """
-    Main function to start the image generation and viewer processes.
+    メイン関数
     """
 
     ctx = get_context('spawn')
