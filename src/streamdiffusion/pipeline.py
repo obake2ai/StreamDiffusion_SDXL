@@ -1,17 +1,21 @@
-# import time
-# from typing import List, Optional, Union, Any, Dict, Tuple, Literal
-#
-# import numpy as np
-# import PIL.Image
-# import torch
-# from diffusers import LCMScheduler, StableDiffusionPipeline
-# from diffusers.image_processor import VaeImageProcessor
-# from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import (
-#     retrieve_latents,
-# )
-#
-# from streamdiffusion.image_filter import SimilarImageFilter
-#
+print("Starting pipeline.py")
+
+import time
+from typing import List, Optional, Union, Any, Dict, Tuple, Literal
+
+import numpy as np
+import PIL.Image
+import torch
+from diffusers import LCMScheduler, StableDiffusionPipeline
+from diffusers.image_processor import VaeImageProcessor
+from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import (
+    retrieve_latents,
+)
+
+from streamdiffusion.image_filter import SimilarImageFilter
+
+print("Imports completed")
+print("Defining StreamDiffusion")
 
 class StreamDiffusion:
     def __init__(
@@ -495,6 +499,9 @@ class StreamDiffusion:
         ) / self.alpha_prod_t_sqrt
         return self.decode_image(x_0_pred_out)
 
+print("StreamDiffusion defined")
+print("Defining StreamDiffusionControlNet")
+
 class StreamDiffusionControlNet(StreamDiffusion):
     def __init__(
         self,
@@ -924,3 +931,5 @@ class StreamDiffusionControlNet(StreamDiffusion):
         inference_time = start.elapsed_time(end) / 1000
         self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
         return x_output
+
+print("StreamDiffusionControlNet defined")
