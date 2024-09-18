@@ -13,6 +13,7 @@ import PIL.Image
 import mss
 import fire
 import tkinter as tk
+import cv2  # 追加
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -20,7 +21,7 @@ from utils.viewer import receive_images
 from utils.wrapper import StreamDiffusionWrapper
 
 import torch
-from diffusers import AutoencoderTiny, StableDiffusionPipeline,ControlNetModel, StableDiffusionControlNetPipeline,StableDiffusionImg2ImgPipeline
+from diffusers import AutoencoderTiny, StableDiffusionPipeline, ControlNetModel, StableDiffusionControlNetPipeline, StableDiffusionImg2ImgPipeline
 from diffusers.utils import load_image
 
 from streamdiffusion import StreamDiffusion
@@ -41,32 +42,32 @@ box_prompt = "xshingoboy"
 
 class StreamDiffusionControlNetSample(StreamDiffusion):
     def __init__(self,
-        pipe: StableDiffusionPipeline,
-        t_index_list: List[int],
-        torch_dtype: torch.dtype = torch.float16,
-        width: int = 512,
-        height: int = 512,
-        do_add_noise: bool = True,
-        use_denoising_batch: bool = True,
-        frame_buffer_size: int = 1,
-        cfg_type: Literal["none", "full", "self", "initialize"] = "self",
-        ip_adapter = None):
+                 pipe: StableDiffusionPipeline,
+                 t_index_list: List[int],
+                 torch_dtype: torch.dtype = torch.float16,
+                 width: int = 512,
+                 height: int = 512,
+                 do_add_noise: bool = True,
+                 use_denoising_batch: bool = True,
+                 frame_buffer_size: int = 1,
+                 cfg_type: Literal["none", "full", "self", "initialize"] = "self",
+                 ip_adapter=None):
         super().__init__(pipe,
-            t_index_list,
-            torch_dtype,
-            width,
-            height,
-            do_add_noise,
-            use_denoising_batch,
-            frame_buffer_size,
-            cfg_type,
-            )
-        self.ip_adapter=ip_adapter
+                         t_index_list,
+                         torch_dtype,
+                         width,
+                         height,
+                         do_add_noise,
+                         use_denoising_batch,
+                         frame_buffer_size,
+                         cfg_type,
+                         )
+        self.ip_adapter = ip_adapter
         if pipe.controlnet != None:
             self.controlnet = pipe.controlnet
         self.input_latent = None
         self.ctl_image_t_buffer = None
-        self.added_cond_kwargs=None
+        self.added_cond_kwargs = None
 
     @torch.no_grad()
     def prepare(
@@ -78,9 +79,9 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         delta: float = 1.0,
         generator: Optional[torch.Generator] = torch.Generator(),
         seed: int = 2,
-        ip_adapter_image = None
+        ip_adapter_image=None
     ) -> None:
-        self.do_classifier_free_guidance=False
+        self.do_classifier_free_guidance = False
         if self.cfg_type == "none":
             self.guidance_scale = 1.0
         else:
@@ -89,18 +90,15 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
         ##IPAdapterのため
         if self.ip_adapter:
-            ip_adapter_image  = ip_adapter_image .resize((self.height, self.width))
+            ip_adapter_image = ip_adapter_image.resize((self.height, self.width))
 
-
-            #SD IPADAPTERIMPL
+            # SD IPADAPTERIMPL
             num_images_per_prompt = 1
 
             if ip_adapter_image is not None:
                 image_embeds, negative_image_embeds = self.pipe.encode_image(ip_adapter_image, "cuda", num_images_per_prompt)
 
-
             print("image_embeded:{}".format(image_embeds.shape))
-
 
         self.generator = generator
         self.generator.manual_seed(seed)
@@ -125,7 +123,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             num_images_per_prompt=1,
             do_classifier_free_guidance=self.do_classifier_free_guidance,
             negative_prompt=negative_prompt,
-            #lora_scale=lora_scale,
+            # lora_scale=lora_scale,
         )
         self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
 
@@ -141,17 +139,16 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 [uncond_prompt_embeds, self.prompt_embeds], dim=0
             )
 
-
         if self.ip_adapter:
-            #IPADAPTER ORIGINAL IMPL
+            # IPADAPTER ORIGINAL IMPL
             image_embeds = image_embeds.repeat(self.batch_size, 1, 1)
-            #image_embeds = image_embeds.repeat(4, 1, 1)
+            # image_embeds = image_embeds.repeat(4, 1, 1)
             if self.do_classifier_free_guidance:
                 negative_image_embeds = negative_image_embeds.repeat(self.batch_size, 1, 1)
 
                 image_embeds = torch.cat([negative_image_embeds, image_embeds])
 
-            #SD IPADAPTER IMPL
+            # SD IPADAPTER IMPL
             self.added_cond_kwargs = {"image_embeds": image_embeds} if ip_adapter_image is not None else None
 
         self.scheduler.set_timesteps(num_inference_steps, self.device)
@@ -186,7 +183,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             )
             c_skip_list.append(c_skip)
             c_out_list.append(c_out)
-
         self.c_skip = (
             torch.stack(c_skip_list)
             .view(len(self.t_list), 1, 1, 1)
@@ -231,7 +227,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         x_t_latent: torch.Tensor,
         t_list: Union[torch.Tensor, list[int]],
         idx: Optional[int] = None,
-        image = None
+        image=None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
             x_t_latent_plus_uc = torch.concat([x_t_latent[0:1], x_t_latent], dim=0)
@@ -239,22 +235,22 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
             x_t_latent_plus_uc = torch.concat([x_t_latent, x_t_latent], dim=0)
             t_list = torch.concat([t_list, t_list], dim=0)
-            #image = torch.concat([image, image], dim=0)
+            # image = torch.concat([image, image], dim=0)
         else:
             x_t_latent_plus_uc = x_t_latent
-        #print(image.shape)
-        latent_model_input = x_t_latent_plus_uc #self.do_classifier_free_guidance
+        # print(image.shape)
+        latent_model_input = x_t_latent_plus_uc  # self.do_classifier_free_guidance
         controlnet_prompt_embeds = self.prompt_embeds
         control_model_input = latent_model_input
         down_block_res_samples, mid_block_res_sample = self.controlnet(
-                    control_model_input,
-                    t_list,
-                    encoder_hidden_states=controlnet_prompt_embeds,
-                    controlnet_cond=image,
-                    conditioning_scale=1, #cond_scale,
-                    guess_mode=False, #guess_mode,
-                    return_dict=False,
-                )
+            control_model_input,
+            t_list,
+            encoder_hidden_states=controlnet_prompt_embeds,
+            controlnet_cond=image,
+            conditioning_scale=1,  # cond_scale,
+            guess_mode=False,  # guess_mode,
+            return_dict=False,
+        )
 
         model_pred = self.unet(
             x_t_latent_plus_uc,
@@ -319,7 +315,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         return denoised_batch, model_pred
 
-    def is_do_classifer_free_guicance(self) :
+    def is_do_classifer_free_guicance(self):
         do_classifier_free_guidance = False
         if self.guidance_scale > 1.0:
             do_classifier_free_guidance = True
@@ -350,15 +346,12 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 [uncond_prompt_embeds, self.prompt_embeds], dim=0
             )
 
-
-
-
     def predict_x0_batch(self, x_t_latent: torch.Tensor,
-                         image = None) -> torch.Tensor:
+                         image=None) -> torch.Tensor:
         prev_latent_batch = self.x_t_latent_buffer
         # todo とりあえず埋める。
         if self.ctl_image_t_buffer is None or self.x_t_latent_buffer.shape[0] >= self.ctl_image_t_buffer.shape[0]:
-            self.ctl_image_t_buffer = image.repeat(self.x_t_latent_buffer.shape[0], 1, 1,1)
+            self.ctl_image_t_buffer = image.repeat(self.x_t_latent_buffer.shape[0], 1, 1, 1)
 
         prev_ctl_image_t_buffer = self.ctl_image_t_buffer
 
@@ -388,7 +381,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                         self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
                     )
                 if self.cfg_type == "full":
-                    self.ctl_image_t_buffer = images[:-2] # TODO 後ろ２つでいいのか？
+                    self.ctl_image_t_buffer = images[:-2]  # TODO 後ろ２つでいいのか？
                 else:
                     self.ctl_image_t_buffer = images[:-1]
             else:
@@ -418,9 +411,8 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         return x_0_pred_out
 
-
     @torch.no_grad()
-    def ctlimg2img(self, batch_size: int = 1, ctlnet_image = None, keep_latent = False) -> torch.Tensor:
+    def ctlimg2img(self, batch_size: int = 1, ctlnet_image=None, keep_latent=False) -> torch.Tensor:
         if not keep_latent:
             self.input_latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
                 device=self.device, dtype=self.dtype
@@ -437,25 +429,25 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         start.record()
         tstart = time.time()
 
-        #コントロールネット用の計算
+        # コントロールネット用の計算
         num_images_per_prompt = 1
         batch_size = 1
         guess_mode = False
         if self.pipe.controlnet != None:
             timage = self.pipe.prepare_image(
-                    image=ctlnet_image,
-                    width=self.width,
-                    height=self.height,
-                    batch_size=batch_size * num_images_per_prompt,
-                    num_images_per_prompt=num_images_per_prompt,
-                    device=self.device,
-                    dtype=self.controlnet.dtype,
-                    do_classifier_free_guidance=self.do_classifier_free_guidance,
-                    guess_mode=guess_mode,
-                )
+                image=ctlnet_image,
+                width=self.width,
+                height=self.height,
+                batch_size=batch_size * num_images_per_prompt,
+                num_images_per_prompt=num_images_per_prompt,
+                device=self.device,
+                dtype=self.controlnet.dtype,
+                do_classifier_free_guidance=self.do_classifier_free_guidance,
+                guess_mode=guess_mode,
+            )
 
         ctlnet_image = timage
-        x_0_pred_out = self.predict_x0_batch(self.input_latent,ctlnet_image)
+        x_0_pred_out = self.predict_x0_batch(self.input_latent, ctlnet_image)
         tstart = time.time()
         x_output = self.decode_image(x_0_pred_out).detach().clone()
 
@@ -468,21 +460,22 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
         return x_output
 
+
 UPEER_FPS = 40
-fps_interval = 1.0/UPEER_FPS
+fps_interval = 1.0 / UPEER_FPS
+inputs = []
 top = 0
 left = 0
 
 
-
-
 def screen(
-    event: threading.Event,
-    input_queue: Queue,
+    event: threading.Event(),
     height: int = 512,
     width: int = 512,
-    monitor: Dict[str, int] = {"top": 300, "left": 200, "width": 512*2, "height": 512*2},
+    monitor: Dict[str, int] = {"top": 300, "left": 200, "width": 512 * 2, "height": 512 * 2},
 ):
+    global inputs
+
     with mss.mss() as sct:
         while True:
             if event.is_set():
@@ -492,16 +485,65 @@ def screen(
             img = sct.grab(monitor)
             img = PIL.Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
             img = img.resize((height, width))
-            input_queue.put(pil2tensor(img))
+            inputs.append(pil2tensor(img))
             interval = time.time() - start_time
-            fps_interval = 1.0/UPEER_FPS
+            fps_interval = 1.0 / UPEER_FPS
             if interval < fps_interval:
                 sleep_time = fps_interval - interval
-                #print("screen:{}".format(sleep_time))
+                # print("screen:{}".format(sleep_time))
 
                 time.sleep(sleep_time)
 
     print('exit : screen')
+
+
+def camera(
+    event: threading.Event(),
+    height: int = 512,
+    width: int = 512,
+):
+    global inputs
+
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Cannot open camera")
+        return
+
+    try:
+        while True:
+            if event.is_set():
+                print("terminate camera thread")
+                break
+
+            start_time = time.time()
+
+            ret, frame = cap.read()
+            if not ret:
+                print("Can't receive frame (stream end?). Exiting ...")
+                break
+
+            # Convert the frame (numpy array) to PIL Image
+            img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+            # Crop the image from the center
+            img_width, img_height = img.size
+            left_crop = (img_width - width) // 2
+            top_crop = (img_height - height) // 2
+            right_crop = left_crop + width
+            bottom_crop = top_crop + height
+            img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
+
+            inputs.append(pil2tensor(img_cropped))
+
+            interval = time.time() - start_time
+            fps_interval = 1.0 / UPEER_FPS
+            if interval < fps_interval:
+                sleep_time = fps_interval - interval
+                time.sleep(sleep_time)
+    finally:
+        cap.release()
+        print('exit : camera')
+
 
 def dummy_screen(
         width: int,
@@ -513,13 +555,16 @@ def dummy_screen(
     root.resizable(False, False)
     root.attributes("-alpha", 0.8)
     root.configure(bg="black")
+
     def destroy(event):
         root.destroy()
-    root.bind("<Return>", destroy)
+
     def update_geometry(event):
         global top, left
         top = root.winfo_y()
         left = root.winfo_x()
+
+    root.bind("<Return>", destroy)
     root.bind("<Configure>", update_geometry)
     root.mainloop()
     return {"top": top, "left": left, "width": width, "height": height}
@@ -544,7 +589,7 @@ def prompt_window(queue):
     # 入力フィールドを作成
     de = box_prompt
     sv = tk.StringVar()
-    entry = tk.Entry(root,textvariable=sv)
+    entry = tk.Entry(root, textvariable=sv)
     entry.insert(0, de)
     entry.pack(pady=10, fill=tk.X)
 
@@ -555,6 +600,7 @@ def prompt_window(queue):
     # イベントループを開始
     root.mainloop()
 
+
 def monitor_setting_process(
     width: int,
     height: int,
@@ -563,28 +609,9 @@ def monitor_setting_process(
     monitor = dummy_screen(width, height)
     monitor_sender.send(monitor)
 
-def receive_input_images(input_queue: Queue, monitor: Dict[str, int]):
-    import cv2
-    import queue
-    left = monitor['left'] + monitor['width']  # キャプチャエリアの右側に表示
-    top = monitor['top']
-    cv2.namedWindow('Input Images', cv2.WINDOW_NORMAL)
-    cv2.moveWindow('Input Images', left, top)
-    while True:
-        try:
-            img = input_queue.get(timeout=1)
-            if isinstance(img, torch.Tensor):
-                img = img.cpu().numpy()
-                img = np.transpose(img, (1, 2, 0))
-            img = (img * 255).astype(np.uint8)
-            cv2.imshow('Input Images', img)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        except queue.Empty:
-            pass
-    cv2.destroyAllWindows()
 
 base_img = None
+
 
 def image_generation_process(
     queue: Queue,
@@ -607,7 +634,7 @@ def image_generation_process(
     enable_similar_image_filter: bool,
     similar_image_filter_threshold: float,
     similar_image_filter_max_skip_frame: float,
-    monitor: Dict[str, int],
+    monitor_receiver: Connection,
     prompt_queue
 ) -> None:
     """
@@ -615,78 +642,33 @@ def image_generation_process(
 
     Parameters
     ----------
-    queue : Queue
-        The queue to put the generated images in.
-    fps_queue : Queue
-        The queue to put the calculated fps.
-    model_id_or_path : str
-        The name of the model to use for image generation.
-    lora_dict : Optional[Dict[str, float]], optional
-        The lora_dict to load, by default None.
-        Keys are the LoRA names and values are the LoRA scales.
-        Example: {'LoRA_1' : 0.5 , 'LoRA_2' : 0.7 ,...}
-    prompt : str
-        The prompt to generate images from.
-    negative_prompt : str, optional
-        The negative prompt to use.
-    frame_buffer_size : int, optional
-        The frame buffer size for denoising batch, by default 1.
-    width : int, optional
-        The width of the image, by default 512.
-    height : int, optional
-        The height of the image, by default 512.
-    acceleration : Literal["none", "xformers", "tensorrt"], optional
-        The acceleration method, by default "tensorrt".
-    use_denoising_batch : bool, optional
-        Whether to use denoising batch or not, by default True.
-    seed : int, optional
-        The seed, by default 2. if -1, use random seed.
-    cfg_type : Literal["none", "full", "self", "initialize"],
-    optional
-        The cfg_type for img2img mode, by default "self".
-        You cannot use anything other than "none" for txt2img mode.
-    guidance_scale : float, optional
-        The CFG scale, by default 1.2.
-    delta : float, optional
-        The delta multiplier of virtual residual noise,
-        by default 1.0.
-    do_add_noise : bool, optional
-        Whether to add noise for following denoising steps or not,
-        by default True.
-    enable_similar_image_filter : bool, optional
-        Whether to enable similar image filter or not,
-        by default False.
-    similar_image_filter_threshold : float, optional
-        The threshold for similar image filter, by default 0.98.
-    similar_image_filter_max_skip_frame : int, optional
-        The max skip frame for similar image filter, by default 10.
+    （パラメータの説明は省略）
     """
 
-    global base_img
+    global inputs
     global box_prompt
     instep = 50
     ######################################################
-    #パラメタ
+    # パラメタ
     ######################################################
     adapter = True
-    ip_adapter_image_filepath="assets/xshingoboy-0043.jpg"
+    ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list=[0, 16, 32, 45]
-    #t_index_list=[0, 30, 45]
-    #t_index_list=[0,10,20,30,40]
+    t_index_list = [0, 16, 32, 45]
+    # t_index_list=[0, 30, 45]
+    # t_index_list=[0,10,20,30,40]
     cfg_type = "none"
-    #cfg_type="full" #一応動くが・・・
-    #RCFG系は非対応
+    # cfg_type="full" #一応動くが・・・
+    # RCFG系は非対応
 
     delta = 1.0
 
-    #Trueで潜在空間の乱数を固定します。
-    keep_latent=True
+    # Trueで潜在空間の乱数を固定します。
+    keep_latent = True
 
     # fullで有効
     negative_prompt = """(deformed:1.3),(malformed hands:1.4),(poorly drawn hands:1.4),(mutated fingers:1.4),(bad anatomy:1.3),(extra limbs:1.35),(poorly drawn face:1.4),(signature:1.2),(artist name:1.2),(watermark:1.2),(worst quality, low quality, normal quality:1.4), lowres,skin blemishes,extra fingers,fewer fingers,strange fingers,Hand grip,(lean),Strange eyes,(three arms),(Many arms),(watermarking)"""
     ######################################################
-
 
     # ControlNetモデルの準備
     controlnet_pose = ControlNetModel.from_pretrained(
@@ -713,10 +695,9 @@ def image_generation_process(
 
     if adapter:
         pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models",
-                              weight_name="ip-adapter_sd15.bin",
-                              torch_dtype=torch.float16)
+                             weight_name="ip-adapter_sd15.bin",
+                             torch_dtype=torch.float16)
         pipe.set_ip_adapter_scale(1.0)
-
 
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
@@ -726,29 +707,24 @@ def image_generation_process(
         cfg_type=cfg_type,
         width=width,
         height=height,
-        ip_adapter = adapter
+        ip_adapter=adapter
     )
 
-
     # 読み込んだモデルがLCMでなければマージする
-    pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy") #Stable  Diffusion 1.5 のLCM LoRA
+    pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")  # Stable  Diffusion 1.5 のLCM LoRA
     pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
-
-    # pipe.load_lora_weights("latent-consistency/lcm-lora-sdv1-5", adapter_name="lcm") #Stable  Diffusion 1.5 のLCM LoRA
-    # pipe.set_adapters(["lcm"], adapter_weights=[1.0])
 
     # Tiny VAEで高速化
     stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
 
     # xformersで高速化 ip adapter が効かなくなるので無効にする
-    #pipe.enable_xformers_memory_efficient_attention()
+    # pipe.enable_xformers_memory_efficient_attention()
 
-    ip_adapter_image=None
+    ip_adapter_image = None
     if adapter:
         print("prepare ip adapter")
         # 初期画像の準備
-        ip_adapter_image  = load_image(ip_adapter_image_filepath)
-
+        ip_adapter_image = load_image(ip_adapter_image_filepath)
 
     stream.prepare(
         prompt=box_prompt,
@@ -759,28 +735,42 @@ def image_generation_process(
         ip_adapter_image=ip_adapter_image
     )
 
+    # カメラが接続されているか確認
+    cap = cv2.VideoCapture(0)
+    if cap.isOpened():
+        camera_connected = True
+        cap.release()
+    else:
+        camera_connected = False
+
+    if not camera_connected:
+        monitor = monitor_receiver.recv()
+
     event = threading.Event()
     event.clear()
 
-    input_queue = Queue()
+    if camera_connected:
+        input_thread = threading.Thread(target=camera, args=(event, height, width))
+    else:
+        input_thread = threading.Thread(target=screen, args=(event, height, width, monitor))
 
-    input_screen = threading.Thread(target=screen, args=(event, input_queue, height, width, monitor))
-
-    input_screen.start()
+    input_thread.start()
     time.sleep(1)
     current_prompt = box_prompt
     while True:
         try:
-            if not close_queue.empty(): # closing check
+            if not close_queue.empty():  # closing check
                 break
-            if input_queue.qsize() < frame_buffer_size:
+            if len(inputs) < frame_buffer_size:
                 time.sleep(fps_interval)
                 continue
             start_time = time.time()
             sampled_inputs = []
             for i in range(frame_buffer_size):
-                sampled_inputs.append(input_queue.get())
+                index = (len(inputs) // frame_buffer_size) * i
+                sampled_inputs.append(inputs[len(inputs) - index - 1])
             input_batch = torch.cat(sampled_inputs)
+            inputs.clear()
             new_prompt = current_prompt
             if not prompt_queue.empty():
                 new_prompt = prompt_queue.get(block=False)
@@ -788,17 +778,17 @@ def image_generation_process(
             prompt_change = False
             if current_prompt != new_prompt:
                 current_prompt = new_prompt
-            #    print("change",current_prompt,new_prompt)
+                #    print("change",current_prompt,new_prompt)
 
                 stream.update_prompt(current_prompt, negative_prompt)
                 prompt_change = True
 
             input = input_batch.to(device=stream.device, dtype=stream.dtype)
+            global base_img
             if base_img is None:
                 base_img = input
 
             output_images = stream.ctlimg2img(ctlnet_image=input, keep_latent=keep_latent)
-
 
             if frame_buffer_size == 1:
                 output_images = [output_images]
@@ -814,13 +804,14 @@ def image_generation_process(
             break
 
     print("closing image_generation_process...")
-    event.set() # stop capture thread
-    input_screen.join()
+    event.set()  # stop capture thread
+    input_thread.join()
     print(f"fps: {fps}")
+
 
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
-    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors":1.0},
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors": 1.0},
     prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
@@ -847,28 +838,16 @@ def main(
     prompt_queue = ctx.Queue()
     close_queue = Queue()
 
-    do_add_noise=False
+    do_add_noise = False
     monitor_sender, monitor_receiver = ctx.Pipe()
 
     prompt_process = ctx.Process(
         target=prompt_window,
         args=(
             prompt_queue,
-            ),
+        ),
     )
     prompt_process.start()
-
-    monitor_process = ctx.Process(
-        target=monitor_setting_process,
-        args=(
-            width,
-            height,
-            monitor_sender,
-            ),
-    )
-    monitor_process.start()
-    monitor = monitor_receiver.recv()
-    monitor_process.join()
 
     process1 = ctx.Process(
         target=image_generation_process,
@@ -893,14 +872,22 @@ def main(
             enable_similar_image_filter,
             similar_image_filter_threshold,
             similar_image_filter_max_skip_frame,
-            monitor,
+            monitor_receiver,
             prompt_queue
-            ),
+        ),
     )
     process1.start()
 
-    input_display_process = ctx.Process(target=receive_input_images, args=(queue, monitor))
-    input_display_process.start()
+    monitor_process = ctx.Process(
+        target=monitor_setting_process,
+        args=(
+            width,
+            height,
+            monitor_sender,
+        ),
+    )
+    monitor_process.start()
+    monitor_process.join()
 
     process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
     process2.start()
@@ -910,15 +897,12 @@ def main(
     print("process2 terminated.")
     close_queue.put(True)
     print("process1 terminating...")
-    process1.join(5) # with timeout
+    process1.join(5)  # with timeout
     if process1.is_alive():
         print("process1 still alive. force killing...")
-        process1.terminate() # force kill...
+        process1.terminate()  # force kill...
     process1.join()
     print("process1 terminated.")
-    input_display_process.terminate()
-    input_display_process.join()
-    print("input_display_process terminated.")
 
 
 if __name__ == "__main__":
