@@ -694,10 +694,11 @@ class StreamDiffusionControlNet(StreamDiffusion):
         if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
             x_t_latent_plus_uc = torch.concat([x_t_latent[0:1], x_t_latent], dim=0)
             t_list = torch.concat([t_list[0:1], t_list], dim=0)
+            image = torch.concat([image[0:1], image], dim=0)
         elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
             x_t_latent_plus_uc = torch.concat([x_t_latent, x_t_latent], dim=0)
             t_list = torch.concat([t_list, t_list], dim=0)
-            #image = torch.concat([image, image], dim=0)
+            image = torch.concat([image, image], dim=0)
         else:
             x_t_latent_plus_uc = x_t_latent
         #print(image.shape)
