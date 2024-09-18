@@ -536,10 +536,7 @@ def camera(
             img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
 
             # Resize cropped image to fit the monitor window size
-            if monitor_info:
-                img_resized = img_cropped.resize((monitor_info['width'], monitor_info['height']))
-            else:
-                img_resized = img_cropped
+            img_resized = img_cropped
 
             # Display the resized cropped image
             cv2.imshow("Camera Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
