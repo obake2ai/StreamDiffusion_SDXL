@@ -14,7 +14,7 @@ import fire
 import tkinter as tk
 import cv2
 
-from screeninfo import get_monitors  # 追加
+from screeninfo import get_monitors
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -492,7 +492,7 @@ def camera(
     event: threading.Event(),
     height: int = 512,
     width: int = 512,
-    monitor_info: Dict[str, Any] = None,  # 追加
+    monitor_info: Dict[str, Any] = None,
 ):
     global inputs
 
@@ -524,12 +524,15 @@ def camera(
                 print("Can't receive frame (stream end?). Exiting ...")
                 break
 
+            # フレームをモニターサイズにリサイズ
+            frame_resized = cv2.resize(frame, (monitor_info['width'], monitor_info['height']))
+
             # カメラ入力を表示
-            cv2.imshow("Camera Input", frame)
+            cv2.imshow("Camera Input", frame_resized)
             if cv2.waitKey(1) == ord('q'):
                 break
 
-            # Convert the frame (numpy array) to PIL Image
+            # Convert the frame to PIL Image
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
             # Crop the image from the center
@@ -661,14 +664,14 @@ def image_generation_process(
 
     global inputs
     global box_prompt
-    instep = 50
+    instep = 40
     ######################################################
     # パラメタ
     ######################################################
     adapter = True
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list = [0, 16, 32, 45]
+    t_index_list = [0, 25, 37]
     cfg_type = "none"
     delta = 1.0
 
@@ -749,20 +752,12 @@ def image_generation_process(
     else:
         camera_connected = False
 
-    if not camera_connected:
-        monitor_list = monitor_receiver.recv()
-        # メインモニター以外を選択（ここでは2番目のモニターを使用）
-        if len(monitor_list) > 1:
-            monitor_info = monitor_list[1]  # 2番目のモニター
-        else:
-            monitor_info = monitor_list[0]  # メインモニター
+    monitor_list = monitor_receiver.recv()
+    # 使用するモニターの情報を取得（ここでは2番目のモニターを使用）
+    if len(monitor_list) > 1:
+        monitor_info = monitor_list[1]  # 2番目のモニター
     else:
-        monitor_list = monitor_receiver.recv()
-        # カメラ入力を表示するモニターを選択（ここでは2番目のモニターを使用）
-        if len(monitor_list) > 1:
-            monitor_info = monitor_list[1]  # 2番目のモニター
-        else:
-            monitor_info = monitor_list[0]  # メインモニター
+        monitor_info = monitor_list[0]  # メインモニター
 
     event = threading.Event()
     event.clear()
@@ -827,7 +822,7 @@ def image_generation_process(
 
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
-    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors": 0.7},
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors": 1.0},
     prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
