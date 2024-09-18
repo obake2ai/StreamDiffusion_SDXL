@@ -15,7 +15,7 @@ from diffusers import (
 )
 from PIL import Image
 
-from streamdiffusion import StreamDiffusion
+from streamdiffusion import StreamDiffusion, StreamDiffusionControlNet
 from streamdiffusion.image_utils import postprocess_image
 
 torch.set_grad_enabled(False)
@@ -57,74 +57,6 @@ class StreamDiffusionControlNetWrapper:
         ip_adapter_image: Optional[Union[str, Image.Image]] = None,
         ip_adapter_scale: float = 1.0,
     ):
-        """
-        Initializes the StreamDiffusionControlNetWrapper.
-
-        Parameters
-        ----------
-        model_id_or_path : str
-            The model id or path to load.
-        controlnet_model_id_or_path : str
-            The ControlNet model id or path to load.
-        t_index_list : List[int]
-            The t_index_list to use for inference.
-        lora_dict : Optional[Dict[str, float]], optional
-            The lora_dict to load, by default None.
-            Keys are the LoRA names and values are the LoRA scales.
-            Example: {'LoRA_1': 0.5, 'LoRA_2': 0.7, ...}
-        mode : Literal["img2img", "txt2img"], optional
-            txt2img or img2img, by default "img2img".
-        output_type : Literal["pil", "pt", "np", "latent"], optional
-            The output type of image, by default "pil".
-        lcm_lora_id : Optional[str], optional
-            The lcm_lora_id to load, by default None.
-            If None, the default LCM-LoRA ("latent-consistency/lcm-lora-sdv1-5") will be used.
-        vae_id : Optional[str], optional
-            The vae_id to load, by default None.
-            If None, the default TinyVAE ("madebyollin/taesd") will be used.
-        device : Literal["cpu", "cuda"], optional
-            The device to use for inference, by default "cuda".
-        dtype : torch.dtype, optional
-            The dtype for inference, by default torch.float16.
-        frame_buffer_size : int, optional
-            The frame buffer size for denoising batch, by default 1.
-        width : int, optional
-            The width of the image, by default 512.
-        height : int, optional
-            The height of the image, by default 512.
-        warmup : int, optional
-            The number of warmup steps to perform, by default 10.
-        acceleration : Literal["none", "xformers", "tensorrt"], optional
-            The acceleration method, by default "tensorrt".
-        do_add_noise : bool, optional
-            Whether to add noise for following denoising steps or not, by default True.
-        device_ids : Optional[List[int]], optional
-            The device ids to use for DataParallel, by default None.
-        use_lcm_lora : bool, optional
-            Whether to use LCM-LoRA or not, by default True.
-        use_tiny_vae : bool, optional
-            Whether to use TinyVAE or not, by default True.
-        enable_similar_image_filter : bool, optional
-            Whether to enable similar image filter or not, by default False.
-        similar_image_filter_threshold : float, optional
-            The threshold for similar image filter, by default 0.98.
-        similar_image_filter_max_skip_frame : int, optional
-            The max skip frame for similar image filter, by default 10.
-        use_denoising_batch : bool, optional
-            Whether to use denoising batch or not, by default True.
-        cfg_type : Literal["none", "full", "self", "initialize"], optional
-            The cfg_type for img2img mode, by default "self".
-        seed : int, optional
-            The seed, by default 2.
-        use_safety_checker : bool, optional
-            Whether to use safety checker or not, by default False.
-        ip_adapter_model_id_or_path : Optional[str], optional
-            The ip_adapter model id or path to load, by default None.
-        ip_adapter_image : Optional[Union[str, Image.Image]], optional
-            The image for IP-Adapter conditioning, by default None.
-        ip_adapter_scale : float, optional
-            The scale for IP-Adapter conditioning, by default 1.0.
-        """
         self.device = device
         self.dtype = dtype
         self.width = width
@@ -143,7 +75,7 @@ class StreamDiffusionControlNetWrapper:
         self.ip_adapter_scale = ip_adapter_scale
         self.cfg_type = cfg_type
 
-        self.stream: StreamDiffusion = self._load_model(
+        self.stream: StreamDiffusionControlNetSample = self._load_model(
             model_id_or_path=model_id_or_path,
             controlnet_model_id_or_path=controlnet_model_id_or_path,
             lora_dict=lora_dict,
@@ -193,15 +125,8 @@ class StreamDiffusionControlNetWrapper:
         engine_dir: Optional[Union[str, Path]] = "engines",
         ip_adapter_model_id_or_path: Optional[str] = None,
         ip_adapter_scale: float = 1.0,
-    ) -> StreamDiffusion:
-        """
-        Loads the model with ControlNet and optional IP-Adapter.
-
-        Returns
-        -------
-        StreamDiffusion
-            The loaded model.
-        """
+    ) -> StreamDiffusionControlNetSample:
+        # モデルの読み込みと初期化
         if "xl" in model_id_or_path:
             base_pipeline_cls = StableDiffusionXLPipeline
             self.default_tiny_vae = "madebyollin/taesdxl"
@@ -242,7 +167,8 @@ class StreamDiffusionControlNetWrapper:
             )
             pipe.set_ip_adapter_scale(ip_adapter_scale)
 
-        stream = StreamDiffusion(
+        # StreamDiffusionControlNetSampleを使用
+        stream = StreamDiffusionControlNetSample(
             pipe=pipe,
             t_index_list=t_index_list,
             torch_dtype=self.dtype,
@@ -252,8 +178,10 @@ class StreamDiffusionControlNetWrapper:
             frame_buffer_size=self.frame_buffer_size,
             use_denoising_batch=self.use_denoising_batch,
             cfg_type=cfg_type,
+            ip_adapter=ip_adapter_model_id_or_path is not None,
         )
 
+        # LCM-LoRAや他のLoRAの適用
         if use_lcm_lora:
             if lcm_lora_id is not None:
                 stream.load_lcm_lora(
@@ -269,6 +197,7 @@ class StreamDiffusionControlNetWrapper:
                 stream.fuse_lora(lora_scale=lora_scale)
                 print(f"Use LoRA: {lora_name} with scale {lora_scale}")
 
+        # TinyVAEの適用
         if use_tiny_vae:
             if vae_id is not None:
                 stream.vae = AutoencoderTiny.from_pretrained(vae_id).to(
@@ -279,11 +208,12 @@ class StreamDiffusionControlNetWrapper:
                     device=pipe.device, dtype=pipe.dtype
                 )
 
+        # アクセラレーションの設定
         try:
             if acceleration == "xformers":
                 stream.pipe.enable_xformers_memory_efficient_attention()
             elif acceleration == "tensorrt":
-                # Implement TensorRT acceleration if needed
+                # TensorRTのアクセラレーションが必要な場合の処理
                 pass
         except Exception:
             traceback.print_exc()
@@ -296,7 +226,9 @@ class StreamDiffusionControlNetWrapper:
             "",
             "",
             num_inference_steps=50,
-            guidance_scale=1.1 if stream.cfg_type in ["full", "self", "initialize"] else 1.0,
+            guidance_scale=1.1
+            if stream.cfg_type in ["full", "self", "initialize"]
+            else 1.0,
             generator=torch.manual_seed(seed),
             seed=seed,
         )
