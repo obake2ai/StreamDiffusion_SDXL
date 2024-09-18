@@ -664,7 +664,7 @@ def image_generation_process(
     keep_latent=True
 
     # fullで有効
-    negative_prompt = """(monochrome:0.8),(deformed:1.3),(malformed hands:1.4),(poorly drawn hands:1.4),(mutated fingers:1.4),(bad anatomy:1.3),(extra limbs:1.35),(poorly drawn face:1.4),(signature:1.2),(artist name:1.2),(watermark:1.2),(worst quality, low quality, normal quality:1.4), lowres,skin blemishes,extra fingers,fewer fingers,strange fingers,Hand grip,(lean),Strange eyes,(three arms),(Many arms),(watermarking)"""
+    negative_prompt = """(deformed:1.3),(malformed hands:1.4),(poorly drawn hands:1.4),(mutated fingers:1.4),(bad anatomy:1.3),(extra limbs:1.35),(poorly drawn face:1.4),(signature:1.2),(artist name:1.2),(watermark:1.2),(worst quality, low quality, normal quality:1.4), lowres,skin blemishes,extra fingers,fewer fingers,strange fingers,Hand grip,(lean),Strange eyes,(three arms),(Many arms),(watermarking)"""
     ######################################################
 
 
@@ -684,7 +684,7 @@ def image_generation_process(
         ).to("cuda")
 
     pipe = StableDiffusionControlNetPipeline.from_pretrained(
-        "KBlueLeaf/kohaku-v2.1",
+        "Lykon/dreamshaper-8-lcm",
         controlnet=controlnet_pose,
         image_encoder=image_encoder).to(
             device=torch.device("cuda"),
@@ -800,14 +800,14 @@ def image_generation_process(
     print(f"fps: {fps}")
 
 def main(
-    model_id_or_path: str = "KBlueLeaf/kohaku-v2.1",
-    lora_dict: Optional[Dict[str, float]] = None,
-    prompt: str = "1girl with brown dog hair, thick glasses, smiling",
+    model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors":1.0},,
+    prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
     width: int = 512,
     height: int = 512,
-    acceleration: Literal["none", "xformers", "tensorrt"] = "none",
+    acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "none",
