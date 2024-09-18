@@ -726,8 +726,8 @@ def image_generation_process(
     # LoRAの読み込み
     pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")
     pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
-    pipe.load_lora_weights("latent-consistency/lcm-lora-sdv1-5", adapter_name="lcm") #Stable  Diffusion 1.5 のLCM LoRA
-    pipe.set_adapters(["lcm"], adapter_weights=[1.0])
+    # pipe.load_lora_weights("latent-consistency/lcm-lora-sdv1-5", adapter_name="lcm") #Stable  Diffusion 1.5 のLCM LoRA
+    # pipe.set_adapters(["lcm"], adapter_weights=[1.0])
 
     # Tiny VAEで高速化
     stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
@@ -825,12 +825,12 @@ def image_generation_process(
 
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
-    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors": 1.0},
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors": 0.9},
     prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
-    width: int = 512,
-    height: int = 512,
+    width: int = 1280,
+    height: int = 720,
     acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
     use_denoising_batch: bool = True,
     seed: int = 2,
