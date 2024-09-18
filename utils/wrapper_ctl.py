@@ -23,6 +23,497 @@ torch.set_grad_enabled(False)
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
+class StreamDiffusionControlNetWrapper:
+    def __init__(
+        self,
+        model_id_or_path: str,
+        controlnet_model_id_or_path: str,
+        t_index_list: List[int],
+        lora_dict: Optional[Dict[str, float]] = None,
+        mode: Literal["img2img", "txt2img"] = "img2img",
+        output_type: Literal["pil", "pt", "np", "latent"] = "pil",
+        lcm_lora_id: Optional[str] = None,
+        vae_id: Optional[str] = None,
+        device: Literal["cpu", "cuda"] = "cuda",
+        dtype: torch.dtype = torch.float16,
+        frame_buffer_size: int = 1,
+        width: int = 512,
+        height: int = 512,
+        warmup: int = 10,
+        acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+        do_add_noise: bool = True,
+        device_ids: Optional[List[int]] = None,
+        use_lcm_lora: bool = True,
+        use_tiny_vae: bool = True,
+        enable_similar_image_filter: bool = False,
+        similar_image_filter_threshold: float = 0.98,
+        similar_image_filter_max_skip_frame: int = 10,
+        use_denoising_batch: bool = True,
+        cfg_type: Literal["none", "full", "self", "initialize"] = "self",
+        seed: int = 2,
+        use_safety_checker: bool = False,
+        engine_dir: Optional[Union[str, Path]] = "engines",
+        sdxl: bool = None,
+        ip_adapter_model_id_or_path: Optional[str] = None,
+        ip_adapter_image: Optional[Union[str, Image.Image]] = None,
+        ip_adapter_scale: float = 1.0,
+    ):
+        self.device = device
+        self.dtype = dtype
+        self.width = width
+        self.height = height
+        self.mode = mode
+        self.output_type = output_type
+        self.frame_buffer_size = frame_buffer_size
+        self.batch_size = (
+            len(t_index_list) * frame_buffer_size
+            if use_denoising_batch
+            else frame_buffer_size
+        )
+        self.use_denoising_batch = use_denoising_batch
+        self.use_safety_checker = use_safety_checker
+        self.ip_adapter_image = ip_adapter_image
+        self.ip_adapter_scale = ip_adapter_scale
+        self.cfg_type = cfg_type
+
+        self.stream: StreamDiffusionControlNetWrapper = self._load_model(
+            model_id_or_path=model_id_or_path,
+            controlnet_model_id_or_path=controlnet_model_id_or_path,
+            lora_dict=lora_dict,
+            lcm_lora_id=lcm_lora_id,
+            vae_id=vae_id,
+            t_index_list=t_index_list,
+            acceleration=acceleration,
+            warmup=warmup,
+            do_add_noise=do_add_noise,
+            use_lcm_lora=use_lcm_lora,
+            use_tiny_vae=use_tiny_vae,
+            cfg_type=cfg_type,
+            seed=seed,
+            engine_dir=engine_dir,
+            ip_adapter_model_id_or_path=ip_adapter_model_id_or_path,
+            ip_adapter_scale=ip_adapter_scale,
+        )
+
+        if hasattr(self.stream.unet, 'config'):
+            self.stream.unet.config.addition_embed_type = None
+
+        if device_ids is not None:
+            self.stream.unet = torch.nn.DataParallel(
+                self.stream.unet, device_ids=device_ids
+            )
+
+        if enable_similar_image_filter:
+            self.stream.enable_similar_image_filter(
+                similar_image_filter_threshold, similar_image_filter_max_skip_frame
+            )
+
+    def _load_model(
+        self,
+        model_id_or_path: str,
+        controlnet_model_id_or_path: str,
+        t_index_list: List[int],
+        lora_dict: Optional[Dict[str, float]] = None,
+        lcm_lora_id: Optional[str] = None,
+        vae_id: Optional[str] = None,
+        acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+        warmup: int = 10,
+        do_add_noise: bool = True,
+        use_lcm_lora: bool = True,
+        use_tiny_vae: bool = True,
+        cfg_type: Literal["none", "full", "self", "initialize"] = "self",
+        seed: int = 2,
+        engine_dir: Optional[Union[str, Path]] = "engines",
+        ip_adapter_model_id_or_path: Optional[str] = None,
+        ip_adapter_scale: float = 1.0,
+    ) -> StreamDiffusionControlNet:
+        # モデルの読み込みと初期化
+        if "xl" in model_id_or_path:
+            base_pipeline_cls = StableDiffusionXLPipeline
+            self.default_tiny_vae = "madebyollin/taesdxl"
+        else:
+            base_pipeline_cls = StableDiffusionPipeline
+            self.default_tiny_vae = "madebyollin/taesd"
+
+        try:
+            pipe = base_pipeline_cls.from_pretrained(
+                model_id_or_path,
+                torch_dtype=self.dtype,
+            ).to(device=self.device)
+        except Exception:
+            traceback.print_exc()
+            print("Model load has failed. Doesn't exist.")
+            exit()
+
+        controlnet = ControlNetModel.from_pretrained(
+            controlnet_model_id_or_path,
+            torch_dtype=self.dtype,
+        ).to(device=self.device)
+
+        pipe = StableDiffusionControlNetPipeline(
+            vae=pipe.vae,
+            text_encoder=pipe.text_encoder,
+            tokenizer=pipe.tokenizer,
+            unet=pipe.unet,
+            scheduler=pipe.scheduler,
+            safety_checker=None,
+            feature_extractor=None,
+            controlnet=controlnet,
+        ).to(device=self.device)
+
+        if ip_adapter_model_id_or_path:
+            pipe.load_ip_adapter(
+                ip_adapter_model_id_or_path,
+                torch_dtype=self.dtype,
+            )
+            pipe.set_ip_adapter_scale(ip_adapter_scale)
+
+        # StreamDiffusionControlNetWrapperを使用
+        stream = StreamDiffusionControlNet(
+            pipe=pipe,
+            t_index_list=t_index_list,
+            torch_dtype=self.dtype,
+            width=self.width,
+            height=self.height,
+            do_add_noise=do_add_noise,
+            frame_buffer_size=self.frame_buffer_size,
+            use_denoising_batch=self.use_denoising_batch,
+            cfg_type=cfg_type,
+            ip_adapter=ip_adapter_model_id_or_path is not None,
+        )
+
+        # LCM-LoRAや他のLoRAの適用
+        if use_lcm_lora:
+            if lcm_lora_id is not None:
+                stream.load_lcm_lora(
+                    pretrained_model_name_or_path_or_dict=lcm_lora_id
+                )
+            else:
+                stream.load_lcm_lora()
+            stream.fuse_lora()
+
+        if lora_dict is not None:
+            for lora_name, lora_scale in lora_dict.items():
+                stream.load_lora(lora_name)
+                stream.fuse_lora(lora_scale=lora_scale)
+                print(f"Use LoRA: {lora_name} with scale {lora_scale}")
+
+        # TinyVAEの適用
+        if use_tiny_vae:
+            if vae_id is not None:
+                stream.vae = AutoencoderTiny.from_pretrained(vae_id).to(
+                    device=pipe.device, dtype=pipe.dtype
+                )
+            else:
+                stream.vae = AutoencoderTiny.from_pretrained(self.default_tiny_vae).to(
+                    device=pipe.device, dtype=pipe.dtype
+                )
+
+        # アクセラレーションの設定
+        try:
+            if acceleration == "xformers":
+                stream.pipe.enable_xformers_memory_efficient_attention()
+            elif acceleration == "tensorrt":
+                # TensorRTのアクセラレーションが必要な場合の処理
+                pass
+        except Exception:
+            traceback.print_exc()
+            print("Acceleration has failed. Falling back to normal mode.")
+
+        if seed < 0:
+            seed = np.random.randint(0, 1000000)
+
+        stream.prepare(
+            "",
+            "",
+            num_inference_steps=50,
+            guidance_scale=1.1
+            if stream.cfg_type in ["full", "self", "initialize"]
+            else 1.0,
+            generator=torch.manual_seed(seed),
+            seed=seed,
+        )
+
+        if self.use_safety_checker:
+            from transformers import CLIPFeatureExtractor
+            from diffusers.pipelines.stable_diffusion.safety_checker import (
+                StableDiffusionSafetyChecker,
+            )
+
+            self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
+                "CompVis/stable-diffusion-safety-checker"
+            ).to(pipe.device)
+            self.feature_extractor = CLIPFeatureExtractor.from_pretrained(
+                "openai/clip-vit-base-patch32"
+            )
+            self.nsfw_fallback_img = Image.new("RGB", (512, 512), (0, 0, 0))
+
+        return stream
+
+    def prepare(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        num_inference_steps: int = 50,
+        guidance_scale: float = 1.2,
+        delta: float = 1.0,
+        ip_adapter_image: Optional[Union[str, Image.Image]] = None,
+    ) -> None:
+        """
+        Prepares the model for inference.
+
+        Parameters
+        ----------
+        prompt : str
+            The prompt to generate images from.
+        negative_prompt : str, optional
+            The negative prompt, by default "".
+        num_inference_steps : int, optional
+            The number of inference steps to perform, by default 50.
+        guidance_scale : float, optional
+            The guidance scale to use, by default 1.2.
+        delta : float, optional
+            The delta multiplier of virtual residual noise, by default 1.0.
+        ip_adapter_image : Optional[Union[str, Image.Image]], optional
+            The image for IP-Adapter conditioning, by default None.
+        """
+        if ip_adapter_image is not None:
+            if isinstance(ip_adapter_image, str):
+                ip_adapter_image = Image.open(ip_adapter_image).convert("RGB")
+            ip_adapter_image = ip_adapter_image.resize((self.width, self.height))
+
+        self.stream.prepare(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            delta=delta,
+            ip_adapter_image=ip_adapter_image,
+        )
+
+    def __call__(
+        self,
+        image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
+        prompt: Optional[str] = None,
+        controlnet_conditioning_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
+    ) -> Union[Image.Image, List[Image.Image]]:
+        """
+        Performs img2img or txt2img based on the mode with ControlNet conditioning.
+
+        Parameters
+        ----------
+        image : Optional[Union[str, Image.Image, torch.Tensor]]
+            The image to generate from.
+        prompt : Optional[str]
+            The prompt to generate images from.
+        controlnet_conditioning_image : Optional[Union[str, Image.Image, torch.Tensor]]
+            The image for ControlNet conditioning.
+
+        Returns
+        -------
+        Union[Image.Image, List[Image.Image]]
+            The generated image.
+        """
+        if self.mode == "img2img":
+            return self.img2img(image, prompt, controlnet_conditioning_image)
+        else:
+            return self.txt2img(prompt, controlnet_conditioning_image)
+
+    def txt2img(
+        self,
+        prompt: Optional[str] = None,
+        controlnet_conditioning_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
+    ) -> Union[Image.Image, List[Image.Image]]:
+        """
+        Performs txt2img with ControlNet conditioning.
+
+        Parameters
+        ----------
+        prompt : Optional[str]
+            The prompt to generate images from.
+        controlnet_conditioning_image : Optional[Union[str, Image.Image, torch.Tensor]]
+            The image for ControlNet conditioning.
+
+        Returns
+        -------
+        Union[Image.Image, List[Image.Image]]
+            The generated image.
+        """
+        if prompt is not None:
+            self.stream.update_prompt(prompt)
+
+        if controlnet_conditioning_image is not None:
+            controlnet_conditioning_image = self.preprocess_controlnet_image(
+                controlnet_conditioning_image
+            )
+
+        image_tensor = self.stream.txt2img_controlnet(
+            batch_size=self.batch_size,
+            controlnet_conditioning_image=controlnet_conditioning_image,
+            ip_adapter_image=self.ip_adapter_image,
+        )
+        image = self.postprocess_image(image_tensor, output_type=self.output_type)
+
+        if self.use_safety_checker:
+            safety_checker_input = self.feature_extractor(
+                image, return_tensors="pt"
+            ).to(self.device)
+            _, has_nsfw_concept = self.safety_checker(
+                images=image_tensor.to(self.dtype),
+                clip_input=safety_checker_input.pixel_values.to(self.dtype),
+            )
+            if has_nsfw_concept[0]:
+                image = self.nsfw_fallback_img
+
+        return image
+
+    def img2img(
+        self,
+        image: Union[str, Image.Image, torch.Tensor],
+        prompt: Optional[str] = None,
+        controlnet_conditioning_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
+        keep_latent: bool = False,
+    ) -> Union[Image.Image, List[Image.Image]]:
+        """
+        Performs img2img with ControlNet conditioning.
+
+        Parameters
+        ----------
+        image : Union[str, Image.Image, torch.Tensor]
+            The image to generate from.
+        prompt : Optional[str]
+            The prompt to generate images from.
+        controlnet_conditioning_image : Optional[Union[str, Image.Image, torch.Tensor]]
+            The image for ControlNet conditioning.
+        keep_latent : bool
+            Whether to keep the previous latent.
+
+        Returns
+        -------
+        Union[Image.Image, List[Image.Image]]
+            The generated image.
+        """
+        if prompt is not None:
+            self.stream.update_prompt(prompt, self.negative_prompt)
+
+        if isinstance(image, str) or isinstance(image, Image.Image):
+            image = self.preprocess_image(image)
+
+        if controlnet_conditioning_image is not None:
+            controlnet_conditioning_image = self.preprocess_controlnet_image(
+                controlnet_conditioning_image
+            )
+        else:
+            # ControlNet の条件画像が指定されていない場合、入力画像を使用
+            controlnet_conditioning_image = image
+
+        # ctlimg2img メソッドを呼び出します
+        image_tensor = self.stream.ctlimg2img(
+            batch_size=1,
+            ctlnet_image=controlnet_conditioning_image,
+            keep_latent=keep_latent
+        )
+        image = self.postprocess_image(image_tensor, output_type=self.output_type)
+
+        if self.use_safety_checker:
+            safety_checker_input = self.feature_extractor(
+                image, return_tensors="pt"
+            ).to(self.device)
+            _, has_nsfw_concept = self.safety_checker(
+                images=image_tensor.to(self.dtype),
+                clip_input=safety_checker_input.pixel_values.to(self.dtype),
+            )
+            if has_nsfw_concept[0]:
+                image = self.nsfw_fallback_img
+
+        return image
+
+    def preprocess_image(self, image: Union[str, Image.Image, torch.Tensor]) -> torch.Tensor:
+        """
+        Preprocesses the image.
+
+        Parameters
+        ----------
+        image : Union[str, Image.Image, torch.Tensor]
+            The image to preprocess.
+
+        Returns
+        -------
+        torch.Tensor
+            The preprocessed image.
+        """
+        if isinstance(image, str):
+            image = Image.open(image).convert("RGB").resize((self.width, self.height))
+            image = np.array(image).astype(np.float32) / 255.0
+            image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0)
+        elif isinstance(image, Image.Image):
+            image = image.convert("RGB").resize((self.width, self.height))
+            image = np.array(image).astype(np.float32) / 255.0
+            image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0)
+        elif isinstance(image, torch.Tensor):
+            if image.dim() == 3:
+                image = image.unsqueeze(0)  # バッチ次元を追加
+            image = image.to(device=self.device, dtype=self.dtype)
+        else:
+            raise TypeError("Unsupported type for image")
+
+        image = image.to(device=self.device, dtype=self.dtype)
+        return image
+
+    def preprocess_controlnet_image(
+        self, image: Union[str, Image.Image, torch.Tensor]
+    ) -> torch.Tensor:
+        """
+        Preprocesses the ControlNet conditioning image.
+
+        Parameters
+        ----------
+        image : Union[str, Image.Image, torch.Tensor]
+            The image to preprocess.
+
+        Returns
+        -------
+        torch.Tensor
+            The preprocessed image.
+        """
+        return self.preprocess_image(image)
+
+    def postprocess_image(
+        self, image_tensor: torch.Tensor, output_type: str = "pil"
+    ) -> Union[Image.Image, List[Image.Image]]:
+        """
+        Postprocesses the image.
+
+        Parameters
+        ----------
+        image_tensor : torch.Tensor
+            The image tensor to postprocess.
+
+        Returns
+        -------
+        Union[Image.Image, List[Image.Image]]
+            The postprocessed image.
+        """
+        images = postprocess_image(image_tensor.cpu(), output_type=output_type)
+        if self.frame_buffer_size > 1:
+            return images
+        else:
+            return images[0]
+
+    def update_prompt(self, prompt: str, negative_prompt: str = "") -> None:
+        """
+        Updates the prompt.
+
+        Parameters
+        ----------
+        prompt : str
+            The new prompt.
+        negative_prompt : str, optional
+            The negative prompt, by default "".
+        """
+        self.stream.update_prompt(prompt, negative_prompt)
+
+
 class StreamDiffusionWrapper:
     def __init__(
         self,
