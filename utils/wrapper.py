@@ -17,7 +17,6 @@ torch.set_grad_enabled(False)
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
-
 class StreamDiffusionWrapper:
     def __init__(
         self,

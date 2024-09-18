@@ -123,6 +123,7 @@ def image_generation_process(
     画像を生成するプロセス
     """
     global inputs
+    
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,

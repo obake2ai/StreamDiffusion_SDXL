@@ -18,6 +18,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from utils.viewer import receive_images
 from utils.wrapper import StreamDiffusionWrapper
 
+
 inputs = []
 top = 0
 left = 0
