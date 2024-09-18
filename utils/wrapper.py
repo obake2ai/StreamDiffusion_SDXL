@@ -1,17 +1,22 @@
 import gc
 import os
-from pathlib import Path
 import traceback
-from typing import List, Literal, Optional, Union, Dict
+from pathlib import Path
+from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
 import torch
-from diffusers import AutoencoderTiny, StableDiffusionPipeline, StableDiffusionXLPipeline
+from diffusers import (
+    AutoencoderTiny,
+    ControlNetModel,
+    StableDiffusionControlNetPipeline,
+    StableDiffusionPipeline,
+    StableDiffusionXLPipeline,
+)
 from PIL import Image
 
 from streamdiffusion import StreamDiffusion
 from streamdiffusion.image_utils import postprocess_image
-
 
 torch.set_grad_enabled(False)
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -546,7 +551,7 @@ class StreamDiffusionControlNetWrapper:
             return images
         else:
             return images[0]
-            
+
     def update_prompt(self, prompt: str, negative_prompt: str = "") -> None:
         """
         Updates the prompt.
