@@ -75,7 +75,7 @@ class StreamDiffusionControlNetWrapper:
         self.ip_adapter_scale = ip_adapter_scale
         self.cfg_type = cfg_type
 
-        self.stream: StreamDiffusionControlNetSample = self._load_model(
+        self.stream: StreamDiffusionControlNetWrapper = self._load_model(
             model_id_or_path=model_id_or_path,
             controlnet_model_id_or_path=controlnet_model_id_or_path,
             lora_dict=lora_dict,
@@ -167,8 +167,8 @@ class StreamDiffusionControlNetWrapper:
             )
             pipe.set_ip_adapter_scale(ip_adapter_scale)
 
-        # StreamDiffusionControlNetSampleを使用
-        stream = StreamDiffusionControlNetSample(
+        # StreamDiffusionControlNetWrapperを使用
+        stream = StreamDiffusionControlNetWrapper(
             pipe=pipe,
             t_index_list=t_index_list,
             torch_dtype=self.dtype,
