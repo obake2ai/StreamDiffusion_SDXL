@@ -672,7 +672,7 @@ def image_generation_process(
     adapter = True
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list = [0, 25]
+    t_index_list = [10, 25]
     cfg_type = "none"
     delta = 1.0
 
@@ -710,7 +710,7 @@ def image_generation_process(
         pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models",
                              weight_name="ip-adapter_sd15.bin",
                              torch_dtype=torch.float16)
-        pipe.set_ip_adapter_scale(1.0)
+        pipe.set_ip_adapter_scale(0.8)
 
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
