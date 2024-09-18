@@ -6,9 +6,11 @@ from multiprocessing import Process, Queue, get_context
 from multiprocessing.connection import Connection
 from typing import List, Literal, Dict, Optional
 
+sys.path.insert(0, "/root/Share/StreamDiffusion_SDXL/src")
+
 import torch
 import PIL.Image
-from src.streamdiffusion.image_utils import pil2tensor
+from streamdiffusion.image_utils import pil2tensor
 import fire
 import tkinter as tk
 import cv2  # OpenCVを使用してカメラからの画像を取得
