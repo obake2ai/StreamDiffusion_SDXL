@@ -420,13 +420,13 @@ class StreamDiffusionControlNetWrapper:
 
         return image
 
-    def preprocess_image(self, image: Union[str, Image.Image]) -> torch.Tensor:
+    def preprocess_image(self, image: Union[str, Image.Image, torch.Tensor]) -> torch.Tensor:
         """
         Preprocesses the image.
 
         Parameters
         ----------
-        image : Union[str, Image.Image]
+        image : Union[str, Image.Image, torch.Tensor]
             The image to preprocess.
 
         Returns
@@ -436,11 +436,19 @@ class StreamDiffusionControlNetWrapper:
         """
         if isinstance(image, str):
             image = Image.open(image).convert("RGB").resize((self.width, self.height))
+            image = np.array(image).astype(np.float32) / 255.0
+            image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0)
         elif isinstance(image, Image.Image):
             image = image.convert("RGB").resize((self.width, self.height))
+            image = np.array(image).astype(np.float32) / 255.0
+            image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0)
+        elif isinstance(image, torch.Tensor):
+            if image.dim() == 3:
+                image = image.unsqueeze(0)  # バッチ次元を追加
+            image = image.to(device=self.device, dtype=self.dtype)
+        else:
+            raise TypeError("Unsupported type for image")
 
-        image = np.array(image).astype(np.float32) / 255.0
-        image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0)
         image = image.to(device=self.device, dtype=self.dtype)
         return image
 
