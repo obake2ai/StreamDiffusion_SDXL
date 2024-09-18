@@ -1,5 +1,6 @@
 import os
 import sys
+sys.path.insert(0, "/root/Share/StreamDiffusion_SDXL/src")
 import time
 import threading
 from multiprocessing import Process, Queue, get_context
@@ -123,7 +124,7 @@ def image_generation_process(
     画像を生成するプロセス
     """
     global inputs
-    
+
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
