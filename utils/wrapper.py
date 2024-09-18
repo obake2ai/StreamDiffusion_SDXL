@@ -371,6 +371,7 @@ class StreamDiffusionControlNetWrapper:
         image: Union[str, Image.Image, torch.Tensor],
         prompt: Optional[str] = None,
         controlnet_conditioning_image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
+        keep_latent: bool = False,
     ) -> Union[Image.Image, List[Image.Image]]:
         """
         Performs img2img with ControlNet conditioning.
@@ -383,6 +384,8 @@ class StreamDiffusionControlNetWrapper:
             The prompt to generate images from.
         controlnet_conditioning_image : Optional[Union[str, Image.Image, torch.Tensor]]
             The image for ControlNet conditioning.
+        keep_latent : bool
+            Whether to keep the previous latent.
 
         Returns
         -------
@@ -390,7 +393,7 @@ class StreamDiffusionControlNetWrapper:
             The generated image.
         """
         if prompt is not None:
-            self.stream.update_prompt(prompt)
+            self.stream.update_prompt(prompt, self.negative_prompt)
 
         if isinstance(image, str) or isinstance(image, Image.Image):
             image = self.preprocess_image(image)
@@ -399,11 +402,15 @@ class StreamDiffusionControlNetWrapper:
             controlnet_conditioning_image = self.preprocess_controlnet_image(
                 controlnet_conditioning_image
             )
+        else:
+            # ControlNet の条件画像が指定されていない場合、入力画像を使用
+            controlnet_conditioning_image = image
 
-        image_tensor = self.stream.img2img_controlnet(
-            image=image,
-            controlnet_conditioning_image=controlnet_conditioning_image,
-            ip_adapter_image=self.ip_adapter_image,
+        # ctlimg2img メソッドを呼び出します
+        image_tensor = self.stream.ctlimg2img(
+            batch_size=1,
+            ctlnet_image=controlnet_conditioning_image,
+            keep_latent=keep_latent
         )
         image = self.postprocess_image(image_tensor, output_type=self.output_type)
 
