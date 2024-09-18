@@ -168,7 +168,7 @@ class StreamDiffusionControlNetWrapper:
             pipe.set_ip_adapter_scale(ip_adapter_scale)
 
         # StreamDiffusionControlNetWrapperを使用
-        stream = StreamDiffusionControlNetWrapper(
+        stream = StreamDiffusionControlNet(
             pipe=pipe,
             t_index_list=t_index_list,
             torch_dtype=self.dtype,
