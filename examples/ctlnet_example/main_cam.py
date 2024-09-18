@@ -740,7 +740,7 @@ def image_generation_process(
 
 
     ### TODO: 高速化
-    stream.pipe.enable_xformers_memory_efficient_attention()
+    #stream.pipe.enable_xformers_memory_efficient_attention()
 
     stream.prepare(
         prompt=box_prompt,
