@@ -13,436 +13,6 @@ from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img impo
 from streamdiffusion.image_filter import SimilarImageFilter
 
 
-class StreamDiffusionControlNet(StreamDiffusion):
-    def __init__(
-        self,
-        pipe: StableDiffusionPipeline,
-        t_index_list: List[int],
-        torch_dtype: torch.dtype = torch.float16,
-        width: int = 512,
-        height: int = 512,
-        do_add_noise: bool = True,
-        use_denoising_batch: bool = True,
-        frame_buffer_size: int = 1,
-        cfg_type: Literal["none", "full", "self", "initialize"] = "self",
-        ip_adapter = None):
-        super().__init__(pipe,
-            t_index_list,
-            torch_dtype,
-            width,
-            height,
-            do_add_noise,
-            use_denoising_batch,
-            frame_buffer_size,
-            cfg_type,
-            )
-        self.ip_adapter=ip_adapter
-        if pipe.controlnet != None:
-            self.controlnet = pipe.controlnet
-        self.input_latent = None
-        self.ctl_image_t_buffer = None
-        self.added_cond_kwargs=None
-
-    @torch.no_grad()
-    def prepare(
-        self,
-        prompt: str,
-        negative_prompt: str = "",
-        num_inference_steps: int = 50,
-        guidance_scale: float = 1.2,
-        delta: float = 1.0,
-        generator: Optional[torch.Generator] = torch.Generator(),
-        seed: int = 2,
-        ip_adapter_image = None
-    ) -> None:
-        self.do_classifier_free_guidance=False
-        if self.cfg_type == "none":
-            self.guidance_scale = 1.0
-        else:
-            self.guidance_scale = guidance_scale
-        self.delta = delta
-        self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
-        ##IPAdapterのため
-        if self.ip_adapter:
-            ip_adapter_image  = ip_adapter_image .resize((self.height, self.width))
-
-
-            #SD IPADAPTERIMPL
-            num_images_per_prompt = 1
-
-            if ip_adapter_image is not None:
-                image_embeds, negative_image_embeds = self.pipe.encode_image(ip_adapter_image, "cuda", num_images_per_prompt)
-
-
-            print("image_embeded:{}".format(image_embeds.shape))
-
-
-        self.generator = generator
-        self.generator.manual_seed(seed)
-        # initialize x_t_latent (it can be any random tensor)
-        if self.denoising_steps_num > 1:
-            self.x_t_latent_buffer = torch.zeros(
-                (
-                    (self.denoising_steps_num - 1) * self.frame_bff_size,
-                    4,
-                    self.latent_height,
-                    self.latent_width,
-                ),
-                dtype=self.dtype,
-                device=self.device,
-            )
-        else:
-            self.x_t_latent_buffer = None
-
-        encoder_output = self.pipe.encode_prompt(
-            prompt=prompt,
-            device=self.device,
-            num_images_per_prompt=1,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            negative_prompt=negative_prompt,
-            #lora_scale=lora_scale,
-        )
-        self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
-
-        if self.use_denoising_batch and self.cfg_type == "full":
-            uncond_prompt_embeds = encoder_output[1].repeat(self.batch_size, 1, 1)
-        elif self.cfg_type == "initialize":
-            uncond_prompt_embeds = encoder_output[1].repeat(self.frame_bff_size, 1, 1)
-
-        if self.guidance_scale > 1.0 and (
-            self.cfg_type == "initialize" or self.cfg_type == "full"
-        ):
-            self.prompt_embeds = torch.cat(
-                [uncond_prompt_embeds, self.prompt_embeds], dim=0
-            )
-
-
-        if self.ip_adapter:
-            #IPADAPTER ORIGINAL IMPL
-            image_embeds = image_embeds.repeat(self.batch_size, 1, 1)
-            #image_embeds = image_embeds.repeat(4, 1, 1)
-            if self.do_classifier_free_guidance:
-                negative_image_embeds = negative_image_embeds.repeat(self.batch_size, 1, 1)
-
-                image_embeds = torch.cat([negative_image_embeds, image_embeds])
-
-            #SD IPADAPTER IMPL
-            self.added_cond_kwargs = {"image_embeds": image_embeds} if ip_adapter_image is not None else None
-
-        self.scheduler.set_timesteps(num_inference_steps, self.device)
-        self.timesteps = self.scheduler.timesteps.to(self.device)
-
-        # make sub timesteps list based on the indices in the t_list list and the values in the timesteps list
-        self.sub_timesteps = []
-        for t in self.t_list:
-            self.sub_timesteps.append(self.timesteps[t])
-
-        sub_timesteps_tensor = torch.tensor(
-            self.sub_timesteps, dtype=torch.long, device=self.device
-        )
-        self.sub_timesteps_tensor = torch.repeat_interleave(
-            sub_timesteps_tensor,
-            repeats=self.frame_bff_size if self.use_denoising_batch else 1,
-            dim=0,
-        )
-
-        self.init_noise = torch.randn(
-            (self.batch_size, 4, self.latent_height, self.latent_width),
-            generator=generator,
-        ).to(device=self.device, dtype=self.dtype)
-
-        self.stock_noise = torch.zeros_like(self.init_noise)
-
-        c_skip_list = []
-        c_out_list = []
-        for timestep in self.sub_timesteps:
-            c_skip, c_out = self.scheduler.get_scalings_for_boundary_condition_discrete(
-                timestep
-            )
-            c_skip_list.append(c_skip)
-            c_out_list.append(c_out)
-
-        self.c_skip = (
-            torch.stack(c_skip_list)
-            .view(len(self.t_list), 1, 1, 1)
-            .to(dtype=self.dtype, device=self.device)
-        )
-        self.c_out = (
-            torch.stack(c_out_list)
-            .view(len(self.t_list), 1, 1, 1)
-            .to(dtype=self.dtype, device=self.device)
-        )
-
-        alpha_prod_t_sqrt_list = []
-        beta_prod_t_sqrt_list = []
-        for timestep in self.sub_timesteps:
-            alpha_prod_t_sqrt = self.scheduler.alphas_cumprod[timestep].sqrt()
-            beta_prod_t_sqrt = (1 - self.scheduler.alphas_cumprod[timestep]).sqrt()
-            alpha_prod_t_sqrt_list.append(alpha_prod_t_sqrt)
-            beta_prod_t_sqrt_list.append(beta_prod_t_sqrt)
-        alpha_prod_t_sqrt = (
-            torch.stack(alpha_prod_t_sqrt_list)
-            .view(len(self.t_list), 1, 1, 1)
-            .to(dtype=self.dtype, device=self.device)
-        )
-        beta_prod_t_sqrt = (
-            torch.stack(beta_prod_t_sqrt_list)
-            .view(len(self.t_list), 1, 1, 1)
-            .to(dtype=self.dtype, device=self.device)
-        )
-        self.alpha_prod_t_sqrt = torch.repeat_interleave(
-            alpha_prod_t_sqrt,
-            repeats=self.frame_bff_size if self.use_denoising_batch else 1,
-            dim=0,
-        )
-        self.beta_prod_t_sqrt = torch.repeat_interleave(
-            beta_prod_t_sqrt,
-            repeats=self.frame_bff_size if self.use_denoising_batch else 1,
-            dim=0,
-        )
-
-    def unet_step(
-        self,
-        x_t_latent: torch.Tensor,
-        t_list: Union[torch.Tensor, list[int]],
-        idx: Optional[int] = None,
-        image = None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
-            x_t_latent_plus_uc = torch.concat([x_t_latent[0:1], x_t_latent], dim=0)
-            t_list = torch.concat([t_list[0:1], t_list], dim=0)
-        elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
-            x_t_latent_plus_uc = torch.concat([x_t_latent, x_t_latent], dim=0)
-            t_list = torch.concat([t_list, t_list], dim=0)
-            #image = torch.concat([image, image], dim=0)
-        else:
-            x_t_latent_plus_uc = x_t_latent
-        #print(image.shape)
-        latent_model_input = x_t_latent_plus_uc #self.do_classifier_free_guidance
-        controlnet_prompt_embeds = self.prompt_embeds
-        control_model_input = latent_model_input
-        down_block_res_samples, mid_block_res_sample = self.controlnet(
-                    control_model_input,
-                    t_list,
-                    encoder_hidden_states=controlnet_prompt_embeds,
-                    controlnet_cond=image,
-                    conditioning_scale=1, #cond_scale,
-                    guess_mode=False, #guess_mode,
-                    return_dict=False,
-                )
-
-        model_pred = self.unet(
-            x_t_latent_plus_uc,
-            t_list,
-            encoder_hidden_states=self.prompt_embeds,
-            down_block_additional_residuals=down_block_res_samples,
-            mid_block_additional_residual=mid_block_res_sample,
-            return_dict=False,
-            added_cond_kwargs=self.added_cond_kwargs
-        )[0]
-
-        if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
-            noise_pred_text = model_pred[1:]
-            self.stock_noise = torch.concat(
-                [model_pred[0:1], self.stock_noise[1:]], dim=0
-            )  # ここコメントアウトでself out cfg
-        elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
-            noise_pred_uncond, noise_pred_text = model_pred.chunk(2)
-        else:
-            noise_pred_text = model_pred
-        if self.guidance_scale > 1.0 and (
-            self.cfg_type == "self" or self.cfg_type == "initialize"
-        ):
-            noise_pred_uncond = self.stock_noise * self.delta
-        if self.guidance_scale > 1.0 and self.cfg_type != "none":
-            model_pred = noise_pred_uncond + self.guidance_scale * (
-                noise_pred_text - noise_pred_uncond
-            )
-        else:
-            model_pred = noise_pred_text
-
-        # compute the previous noisy sample x_t -> x_t-1
-        if self.use_denoising_batch:
-            denoised_batch = self.scheduler_step_batch(model_pred, x_t_latent, idx)
-            if self.cfg_type == "self" or self.cfg_type == "initialize":
-                scaled_noise = self.beta_prod_t_sqrt * self.stock_noise
-                delta_x = self.scheduler_step_batch(model_pred, scaled_noise, idx)
-                alpha_next = torch.concat(
-                    [
-                        self.alpha_prod_t_sqrt[1:],
-                        torch.ones_like(self.alpha_prod_t_sqrt[0:1]),
-                    ],
-                    dim=0,
-                )
-                delta_x = alpha_next * delta_x
-                beta_next = torch.concat(
-                    [
-                        self.beta_prod_t_sqrt[1:],
-                        torch.ones_like(self.beta_prod_t_sqrt[0:1]),
-                    ],
-                    dim=0,
-                )
-                delta_x = delta_x / beta_next
-                init_noise = torch.concat(
-                    [self.init_noise[1:], self.init_noise[0:1]], dim=0
-                )
-                self.stock_noise = init_noise + delta_x
-
-        else:
-            # denoised_batch = self.scheduler.step(model_pred, t_list[0], x_t_latent).denoised
-            denoised_batch = self.scheduler_step_batch(model_pred, x_t_latent, idx)
-
-        return denoised_batch, model_pred
-
-    def is_do_classifer_free_guicance(self) :
-        do_classifier_free_guidance = False
-        if self.guidance_scale > 1.0:
-            do_classifier_free_guidance = True
-        return do_classifier_free_guidance
-
-    @torch.no_grad()
-    def update_prompt(self, prompt: str, negative_prompt) -> None:
-        do_classifier_free_guidance = self.is_do_classifer_free_guicance()
-
-        encoder_output = self.pipe.encode_prompt(
-            prompt=prompt,
-            device=self.device,
-            num_images_per_prompt=1,
-            do_classifier_free_guidance=do_classifier_free_guidance,
-            negative_prompt=negative_prompt
-        )
-        self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
-
-        if self.use_denoising_batch and self.cfg_type == "full":
-            uncond_prompt_embeds = encoder_output[1].repeat(self.batch_size, 1, 1)
-        elif self.cfg_type == "initialize":
-            uncond_prompt_embeds = encoder_output[1].repeat(self.frame_bff_size, 1, 1)
-
-        if self.guidance_scale > 1.0 and (
-            self.cfg_type == "initialize" or self.cfg_type == "full"
-        ):
-            self.prompt_embeds = torch.cat(
-                [uncond_prompt_embeds, self.prompt_embeds], dim=0
-            )
-
-
-
-
-    def predict_x0_batch(self, x_t_latent: torch.Tensor,
-                         image = None) -> torch.Tensor:
-        prev_latent_batch = self.x_t_latent_buffer
-        # todo とりあえず埋める。
-        if self.ctl_image_t_buffer is None or self.x_t_latent_buffer.shape[0] >= self.ctl_image_t_buffer.shape[0]:
-            self.ctl_image_t_buffer = image.repeat(self.x_t_latent_buffer.shape[0], 1, 1,1)
-
-        prev_ctl_image_t_buffer = self.ctl_image_t_buffer
-
-        if self.use_denoising_batch:
-            t_list = self.sub_timesteps_tensor
-            if self.denoising_steps_num > 1:
-                x_t_latent = torch.cat((x_t_latent, prev_latent_batch), dim=0)
-                self.stock_noise = torch.cat(
-                    (self.init_noise[0:1], self.stock_noise[:-1]), dim=0
-                )
-
-                images = torch.cat(
-                    (image, prev_ctl_image_t_buffer), dim=0
-                )
-
-            x_0_pred_batch, model_pred = self.unet_step(x_t_latent, t_list, image=images)
-
-            if self.denoising_steps_num > 1:
-                x_0_pred_out = x_0_pred_batch[-1].unsqueeze(0)
-                if self.do_add_noise:
-                    self.x_t_latent_buffer = (
-                        self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
-                        + self.beta_prod_t_sqrt[1:] * self.init_noise[1:]
-                    )
-                else:
-                    self.x_t_latent_buffer = (
-                        self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
-                    )
-                if self.cfg_type == "full":
-                    self.ctl_image_t_buffer = images[:-2] # TODO 後ろ２つでいいのか？
-                else:
-                    self.ctl_image_t_buffer = images[:-1]
-            else:
-                x_0_pred_out = x_0_pred_batch
-                self.x_t_latent_buffer = None
-        else:
-            self.init_noise = x_t_latent
-            for idx, t in enumerate(self.sub_timesteps_tensor):
-                t = t.view(
-                    1,
-                ).repeat(
-                    self.frame_bff_size,
-                )
-                x_0_pred, model_pred = self.unet_step(x_t_latent, t, idx, image=image)
-                if idx < len(self.sub_timesteps_tensor) - 1:
-                    if self.do_add_noise:
-                        x_t_latent = self.alpha_prod_t_sqrt[
-                            idx + 1
-                        ] * x_0_pred + self.beta_prod_t_sqrt[
-                            idx + 1
-                        ] * torch.randn_like(
-                            x_0_pred, device=self.device, dtype=self.dtype
-                        )
-                    else:
-                        x_t_latent = self.alpha_prod_t_sqrt[idx + 1] * x_0_pred
-            x_0_pred_out = x_0_pred
-
-        return x_0_pred_out
-
-
-    @torch.no_grad()
-    def ctlimg2img(self, batch_size: int = 1, ctlnet_image = None, keep_latent = False) -> torch.Tensor:
-        if not keep_latent:
-            self.input_latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
-                device=self.device, dtype=self.dtype
-            )
-        else:
-            if self.input_latent is None:
-                latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
-                    device=self.device, dtype=self.dtype
-                )
-                self.input_latent = latent
-
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-        start.record()
-        tstart = time.time()
-
-        #コントロールネット用の計算
-        num_images_per_prompt = 1
-        batch_size = 1
-        guess_mode = False
-        if self.pipe.controlnet != None:
-            timage = self.pipe.prepare_image(
-                    image=ctlnet_image,
-                    width=self.width,
-                    height=self.height,
-                    batch_size=batch_size * num_images_per_prompt,
-                    num_images_per_prompt=num_images_per_prompt,
-                    device=self.device,
-                    dtype=self.controlnet.dtype,
-                    do_classifier_free_guidance=self.do_classifier_free_guidance,
-                    guess_mode=guess_mode,
-                )
-
-        ctlnet_image = timage
-        x_0_pred_out = self.predict_x0_batch(self.input_latent,ctlnet_image)
-        tstart = time.time()
-        x_output = self.decode_image(x_0_pred_out).detach().clone()
-
-        tstart = time.time()
-
-        self.prev_image_result = x_output
-        end.record()
-        torch.cuda.synchronize()
-        inference_time = start.elapsed_time(end) / 1000
-        self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
-        return x_output
-
 class StreamDiffusion:
     def __init__(
         self,
@@ -924,3 +494,433 @@ class StreamDiffusion:
             x_t_latent - self.beta_prod_t_sqrt * model_pred
         ) / self.alpha_prod_t_sqrt
         return self.decode_image(x_0_pred_out)
+
+class StreamDiffusionControlNet(StreamDiffusion):
+    def __init__(
+        self,
+        pipe: StableDiffusionPipeline,
+        t_index_list: List[int],
+        torch_dtype: torch.dtype = torch.float16,
+        width: int = 512,
+        height: int = 512,
+        do_add_noise: bool = True,
+        use_denoising_batch: bool = True,
+        frame_buffer_size: int = 1,
+        cfg_type: Literal["none", "full", "self", "initialize"] = "self",
+        ip_adapter = None):
+        super().__init__(pipe,
+            t_index_list,
+            torch_dtype,
+            width,
+            height,
+            do_add_noise,
+            use_denoising_batch,
+            frame_buffer_size,
+            cfg_type,
+            )
+        self.ip_adapter=ip_adapter
+        if pipe.controlnet != None:
+            self.controlnet = pipe.controlnet
+        self.input_latent = None
+        self.ctl_image_t_buffer = None
+        self.added_cond_kwargs=None
+
+    @torch.no_grad()
+    def prepare(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        num_inference_steps: int = 50,
+        guidance_scale: float = 1.2,
+        delta: float = 1.0,
+        generator: Optional[torch.Generator] = torch.Generator(),
+        seed: int = 2,
+        ip_adapter_image = None
+    ) -> None:
+        self.do_classifier_free_guidance=False
+        if self.cfg_type == "none":
+            self.guidance_scale = 1.0
+        else:
+            self.guidance_scale = guidance_scale
+        self.delta = delta
+        self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
+        ##IPAdapterのため
+        if self.ip_adapter:
+            ip_adapter_image  = ip_adapter_image .resize((self.height, self.width))
+
+
+            #SD IPADAPTERIMPL
+            num_images_per_prompt = 1
+
+            if ip_adapter_image is not None:
+                image_embeds, negative_image_embeds = self.pipe.encode_image(ip_adapter_image, "cuda", num_images_per_prompt)
+
+
+            print("image_embeded:{}".format(image_embeds.shape))
+
+
+        self.generator = generator
+        self.generator.manual_seed(seed)
+        # initialize x_t_latent (it can be any random tensor)
+        if self.denoising_steps_num > 1:
+            self.x_t_latent_buffer = torch.zeros(
+                (
+                    (self.denoising_steps_num - 1) * self.frame_bff_size,
+                    4,
+                    self.latent_height,
+                    self.latent_width,
+                ),
+                dtype=self.dtype,
+                device=self.device,
+            )
+        else:
+            self.x_t_latent_buffer = None
+
+        encoder_output = self.pipe.encode_prompt(
+            prompt=prompt,
+            device=self.device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=self.do_classifier_free_guidance,
+            negative_prompt=negative_prompt,
+            #lora_scale=lora_scale,
+        )
+        self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
+
+        if self.use_denoising_batch and self.cfg_type == "full":
+            uncond_prompt_embeds = encoder_output[1].repeat(self.batch_size, 1, 1)
+        elif self.cfg_type == "initialize":
+            uncond_prompt_embeds = encoder_output[1].repeat(self.frame_bff_size, 1, 1)
+
+        if self.guidance_scale > 1.0 and (
+            self.cfg_type == "initialize" or self.cfg_type == "full"
+        ):
+            self.prompt_embeds = torch.cat(
+                [uncond_prompt_embeds, self.prompt_embeds], dim=0
+            )
+
+
+        if self.ip_adapter:
+            #IPADAPTER ORIGINAL IMPL
+            image_embeds = image_embeds.repeat(self.batch_size, 1, 1)
+            #image_embeds = image_embeds.repeat(4, 1, 1)
+            if self.do_classifier_free_guidance:
+                negative_image_embeds = negative_image_embeds.repeat(self.batch_size, 1, 1)
+
+                image_embeds = torch.cat([negative_image_embeds, image_embeds])
+
+            #SD IPADAPTER IMPL
+            self.added_cond_kwargs = {"image_embeds": image_embeds} if ip_adapter_image is not None else None
+
+        self.scheduler.set_timesteps(num_inference_steps, self.device)
+        self.timesteps = self.scheduler.timesteps.to(self.device)
+
+        # make sub timesteps list based on the indices in the t_list list and the values in the timesteps list
+        self.sub_timesteps = []
+        for t in self.t_list:
+            self.sub_timesteps.append(self.timesteps[t])
+
+        sub_timesteps_tensor = torch.tensor(
+            self.sub_timesteps, dtype=torch.long, device=self.device
+        )
+        self.sub_timesteps_tensor = torch.repeat_interleave(
+            sub_timesteps_tensor,
+            repeats=self.frame_bff_size if self.use_denoising_batch else 1,
+            dim=0,
+        )
+
+        self.init_noise = torch.randn(
+            (self.batch_size, 4, self.latent_height, self.latent_width),
+            generator=generator,
+        ).to(device=self.device, dtype=self.dtype)
+
+        self.stock_noise = torch.zeros_like(self.init_noise)
+
+        c_skip_list = []
+        c_out_list = []
+        for timestep in self.sub_timesteps:
+            c_skip, c_out = self.scheduler.get_scalings_for_boundary_condition_discrete(
+                timestep
+            )
+            c_skip_list.append(c_skip)
+            c_out_list.append(c_out)
+
+        self.c_skip = (
+            torch.stack(c_skip_list)
+            .view(len(self.t_list), 1, 1, 1)
+            .to(dtype=self.dtype, device=self.device)
+        )
+        self.c_out = (
+            torch.stack(c_out_list)
+            .view(len(self.t_list), 1, 1, 1)
+            .to(dtype=self.dtype, device=self.device)
+        )
+
+        alpha_prod_t_sqrt_list = []
+        beta_prod_t_sqrt_list = []
+        for timestep in self.sub_timesteps:
+            alpha_prod_t_sqrt = self.scheduler.alphas_cumprod[timestep].sqrt()
+            beta_prod_t_sqrt = (1 - self.scheduler.alphas_cumprod[timestep]).sqrt()
+            alpha_prod_t_sqrt_list.append(alpha_prod_t_sqrt)
+            beta_prod_t_sqrt_list.append(beta_prod_t_sqrt)
+        alpha_prod_t_sqrt = (
+            torch.stack(alpha_prod_t_sqrt_list)
+            .view(len(self.t_list), 1, 1, 1)
+            .to(dtype=self.dtype, device=self.device)
+        )
+        beta_prod_t_sqrt = (
+            torch.stack(beta_prod_t_sqrt_list)
+            .view(len(self.t_list), 1, 1, 1)
+            .to(dtype=self.dtype, device=self.device)
+        )
+        self.alpha_prod_t_sqrt = torch.repeat_interleave(
+            alpha_prod_t_sqrt,
+            repeats=self.frame_bff_size if self.use_denoising_batch else 1,
+            dim=0,
+        )
+        self.beta_prod_t_sqrt = torch.repeat_interleave(
+            beta_prod_t_sqrt,
+            repeats=self.frame_bff_size if self.use_denoising_batch else 1,
+            dim=0,
+        )
+
+    def unet_step(
+        self,
+        x_t_latent: torch.Tensor,
+        t_list: Union[torch.Tensor, list[int]],
+        idx: Optional[int] = None,
+        image = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
+            x_t_latent_plus_uc = torch.concat([x_t_latent[0:1], x_t_latent], dim=0)
+            t_list = torch.concat([t_list[0:1], t_list], dim=0)
+        elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
+            x_t_latent_plus_uc = torch.concat([x_t_latent, x_t_latent], dim=0)
+            t_list = torch.concat([t_list, t_list], dim=0)
+            #image = torch.concat([image, image], dim=0)
+        else:
+            x_t_latent_plus_uc = x_t_latent
+        #print(image.shape)
+        latent_model_input = x_t_latent_plus_uc #self.do_classifier_free_guidance
+        controlnet_prompt_embeds = self.prompt_embeds
+        control_model_input = latent_model_input
+        down_block_res_samples, mid_block_res_sample = self.controlnet(
+                    control_model_input,
+                    t_list,
+                    encoder_hidden_states=controlnet_prompt_embeds,
+                    controlnet_cond=image,
+                    conditioning_scale=1, #cond_scale,
+                    guess_mode=False, #guess_mode,
+                    return_dict=False,
+                )
+
+        model_pred = self.unet(
+            x_t_latent_plus_uc,
+            t_list,
+            encoder_hidden_states=self.prompt_embeds,
+            down_block_additional_residuals=down_block_res_samples,
+            mid_block_additional_residual=mid_block_res_sample,
+            return_dict=False,
+            added_cond_kwargs=self.added_cond_kwargs
+        )[0]
+
+        if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
+            noise_pred_text = model_pred[1:]
+            self.stock_noise = torch.concat(
+                [model_pred[0:1], self.stock_noise[1:]], dim=0
+            )  # ここコメントアウトでself out cfg
+        elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
+            noise_pred_uncond, noise_pred_text = model_pred.chunk(2)
+        else:
+            noise_pred_text = model_pred
+        if self.guidance_scale > 1.0 and (
+            self.cfg_type == "self" or self.cfg_type == "initialize"
+        ):
+            noise_pred_uncond = self.stock_noise * self.delta
+        if self.guidance_scale > 1.0 and self.cfg_type != "none":
+            model_pred = noise_pred_uncond + self.guidance_scale * (
+                noise_pred_text - noise_pred_uncond
+            )
+        else:
+            model_pred = noise_pred_text
+
+        # compute the previous noisy sample x_t -> x_t-1
+        if self.use_denoising_batch:
+            denoised_batch = self.scheduler_step_batch(model_pred, x_t_latent, idx)
+            if self.cfg_type == "self" or self.cfg_type == "initialize":
+                scaled_noise = self.beta_prod_t_sqrt * self.stock_noise
+                delta_x = self.scheduler_step_batch(model_pred, scaled_noise, idx)
+                alpha_next = torch.concat(
+                    [
+                        self.alpha_prod_t_sqrt[1:],
+                        torch.ones_like(self.alpha_prod_t_sqrt[0:1]),
+                    ],
+                    dim=0,
+                )
+                delta_x = alpha_next * delta_x
+                beta_next = torch.concat(
+                    [
+                        self.beta_prod_t_sqrt[1:],
+                        torch.ones_like(self.beta_prod_t_sqrt[0:1]),
+                    ],
+                    dim=0,
+                )
+                delta_x = delta_x / beta_next
+                init_noise = torch.concat(
+                    [self.init_noise[1:], self.init_noise[0:1]], dim=0
+                )
+                self.stock_noise = init_noise + delta_x
+
+        else:
+            # denoised_batch = self.scheduler.step(model_pred, t_list[0], x_t_latent).denoised
+            denoised_batch = self.scheduler_step_batch(model_pred, x_t_latent, idx)
+
+        return denoised_batch, model_pred
+
+    def is_do_classifer_free_guicance(self) :
+        do_classifier_free_guidance = False
+        if self.guidance_scale > 1.0:
+            do_classifier_free_guidance = True
+        return do_classifier_free_guidance
+
+    @torch.no_grad()
+    def update_prompt(self, prompt: str, negative_prompt) -> None:
+        do_classifier_free_guidance = self.is_do_classifer_free_guicance()
+
+        encoder_output = self.pipe.encode_prompt(
+            prompt=prompt,
+            device=self.device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=do_classifier_free_guidance,
+            negative_prompt=negative_prompt
+        )
+        self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
+
+        if self.use_denoising_batch and self.cfg_type == "full":
+            uncond_prompt_embeds = encoder_output[1].repeat(self.batch_size, 1, 1)
+        elif self.cfg_type == "initialize":
+            uncond_prompt_embeds = encoder_output[1].repeat(self.frame_bff_size, 1, 1)
+
+        if self.guidance_scale > 1.0 and (
+            self.cfg_type == "initialize" or self.cfg_type == "full"
+        ):
+            self.prompt_embeds = torch.cat(
+                [uncond_prompt_embeds, self.prompt_embeds], dim=0
+            )
+
+
+
+
+    def predict_x0_batch(self, x_t_latent: torch.Tensor,
+                         image = None) -> torch.Tensor:
+        prev_latent_batch = self.x_t_latent_buffer
+        # todo とりあえず埋める。
+        if self.ctl_image_t_buffer is None or self.x_t_latent_buffer.shape[0] >= self.ctl_image_t_buffer.shape[0]:
+            self.ctl_image_t_buffer = image.repeat(self.x_t_latent_buffer.shape[0], 1, 1,1)
+
+        prev_ctl_image_t_buffer = self.ctl_image_t_buffer
+
+        if self.use_denoising_batch:
+            t_list = self.sub_timesteps_tensor
+            if self.denoising_steps_num > 1:
+                x_t_latent = torch.cat((x_t_latent, prev_latent_batch), dim=0)
+                self.stock_noise = torch.cat(
+                    (self.init_noise[0:1], self.stock_noise[:-1]), dim=0
+                )
+
+                images = torch.cat(
+                    (image, prev_ctl_image_t_buffer), dim=0
+                )
+
+            x_0_pred_batch, model_pred = self.unet_step(x_t_latent, t_list, image=images)
+
+            if self.denoising_steps_num > 1:
+                x_0_pred_out = x_0_pred_batch[-1].unsqueeze(0)
+                if self.do_add_noise:
+                    self.x_t_latent_buffer = (
+                        self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
+                        + self.beta_prod_t_sqrt[1:] * self.init_noise[1:]
+                    )
+                else:
+                    self.x_t_latent_buffer = (
+                        self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
+                    )
+                if self.cfg_type == "full":
+                    self.ctl_image_t_buffer = images[:-2] # TODO 後ろ２つでいいのか？
+                else:
+                    self.ctl_image_t_buffer = images[:-1]
+            else:
+                x_0_pred_out = x_0_pred_batch
+                self.x_t_latent_buffer = None
+        else:
+            self.init_noise = x_t_latent
+            for idx, t in enumerate(self.sub_timesteps_tensor):
+                t = t.view(
+                    1,
+                ).repeat(
+                    self.frame_bff_size,
+                )
+                x_0_pred, model_pred = self.unet_step(x_t_latent, t, idx, image=image)
+                if idx < len(self.sub_timesteps_tensor) - 1:
+                    if self.do_add_noise:
+                        x_t_latent = self.alpha_prod_t_sqrt[
+                            idx + 1
+                        ] * x_0_pred + self.beta_prod_t_sqrt[
+                            idx + 1
+                        ] * torch.randn_like(
+                            x_0_pred, device=self.device, dtype=self.dtype
+                        )
+                    else:
+                        x_t_latent = self.alpha_prod_t_sqrt[idx + 1] * x_0_pred
+            x_0_pred_out = x_0_pred
+
+        return x_0_pred_out
+
+
+    @torch.no_grad()
+    def ctlimg2img(self, batch_size: int = 1, ctlnet_image = None, keep_latent = False) -> torch.Tensor:
+        if not keep_latent:
+            self.input_latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
+                device=self.device, dtype=self.dtype
+            )
+        else:
+            if self.input_latent is None:
+                latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
+                    device=self.device, dtype=self.dtype
+                )
+                self.input_latent = latent
+
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+        tstart = time.time()
+
+        #コントロールネット用の計算
+        num_images_per_prompt = 1
+        batch_size = 1
+        guess_mode = False
+        if self.pipe.controlnet != None:
+            timage = self.pipe.prepare_image(
+                    image=ctlnet_image,
+                    width=self.width,
+                    height=self.height,
+                    batch_size=batch_size * num_images_per_prompt,
+                    num_images_per_prompt=num_images_per_prompt,
+                    device=self.device,
+                    dtype=self.controlnet.dtype,
+                    do_classifier_free_guidance=self.do_classifier_free_guidance,
+                    guess_mode=guess_mode,
+                )
+
+        ctlnet_image = timage
+        x_0_pred_out = self.predict_x0_batch(self.input_latent,ctlnet_image)
+        tstart = time.time()
+        x_output = self.decode_image(x_0_pred_out).detach().clone()
+
+        tstart = time.time()
+
+        self.prev_image_result = x_output
+        end.record()
+        torch.cuda.synchronize()
+        inference_time = start.elapsed_time(end) / 1000
+        self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
+        return x_output
