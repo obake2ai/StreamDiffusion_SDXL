@@ -904,9 +904,9 @@ def image_generation_process(
 
                 stream = accelerate_with_stable_fast(stream)
                 print("StableFast acceleration enabled.")
-        except Exception:
-            traceback.print_exc()
-            print("Acceleration has failed. Falling back to normal mode.")
+    except Exception:
+        traceback.print_exc()
+        print("Acceleration has failed. Falling back to normal mode.")
 
     #stream.pipe.enable_xformers_memory_efficient_attention()
 
