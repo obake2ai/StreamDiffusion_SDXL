@@ -524,14 +524,6 @@ def camera(
                 print("Can't receive frame (stream end?). Exiting ...")
                 break
 
-            # フレームをモニターサイズにリサイズ
-            frame_resized = cv2.resize(frame, (monitor_info['width'], monitor_info['height']))
-
-            # カメラ入力を表示
-            cv2.imshow("Camera Input", frame_resized)
-            if cv2.waitKey(1) == ord('q'):
-                break
-
             # Convert the frame to PIL Image
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
@@ -542,6 +534,17 @@ def camera(
             right_crop = left_crop + width
             bottom_crop = top_crop + height
             img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
+
+            # Resize cropped image to fit the monitor window size
+            if monitor_info:
+                img_resized = img_cropped.resize((monitor_info['width'], monitor_info['height']))
+            else:
+                img_resized = img_cropped
+
+            # Display the resized cropped image
+            cv2.imshow("Camera Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
+            if cv2.waitKey(1) == ord('q'):
+                break
 
             inputs.append(pil2tensor(img_cropped))
 
@@ -554,6 +557,7 @@ def camera(
         cap.release()
         cv2.destroyWindow("Camera Input")
         print('exit : camera')
+
 
 
 def dummy_screen(
@@ -664,14 +668,14 @@ def image_generation_process(
 
     global inputs
     global box_prompt
-    instep = 40
+    instep = 50
     ######################################################
     # パラメタ
     ######################################################
     adapter = True
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list = [0, 25, 37]
+    t_index_list = [18, 37]
     cfg_type = "none"
     delta = 1.0
 
