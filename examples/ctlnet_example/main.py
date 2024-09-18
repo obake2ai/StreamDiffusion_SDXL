@@ -711,9 +711,9 @@ def image_generation_process(
     )
 
 
-    # 読み込んだモデルがLCMでなければマージする
-    pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="shingoboy") #Stable  Diffusion 1.5 のLCM LoRA
-    pipe.set_adapters(["shingoboy"], adapter_weights=[1.0])
+    # # 読み込んだモデルがLCMでなければマージする
+    # pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="shingoboy") #Stable  Diffusion 1.5 のLCM LoRA
+    # pipe.set_adapters(["shingoboy"], adapter_weights=[1.0])
 
     # Tiny VAEで高速化
     stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
