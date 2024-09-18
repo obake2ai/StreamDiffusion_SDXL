@@ -126,7 +126,7 @@ def image_generation_process(
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
-        t_index_list=[32, 45],
+        t_index_list=[0],
         frame_buffer_size=frame_buffer_size,
         width=width,  # widthを正しく指定
         height=height,  # heightを正しく指定
@@ -145,7 +145,7 @@ def image_generation_process(
     stream.prepare(
         prompt=prompt,
         negative_prompt=negative_prompt,
-        num_inference_steps=50,
+        num_inference_steps=1,
         guidance_scale=guidance_scale,
         delta=delta,
     )
