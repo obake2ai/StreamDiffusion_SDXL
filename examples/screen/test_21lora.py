@@ -145,7 +145,7 @@ def image_generation_process(
     stream.prepare(
         prompt=prompt,
         negative_prompt=negative_prompt,
-        num_inference_steps=1,
+        num_inference_steps=50,
         guidance_scale=guidance_scale,
         delta=delta,
     )
@@ -197,7 +197,7 @@ def main(
     frame_buffer_size: int = 1,
     width: int = 512,
     height: int = 512,
-    acceleration: Literal["none", "xformers", "tensorrt"] = "xformers",
+    acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "self",
