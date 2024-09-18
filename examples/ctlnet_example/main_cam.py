@@ -724,8 +724,8 @@ def image_generation_process(
     )
 
     # LoRAの読み込み
-    # pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")
-    # pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
+    pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")
+    pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
     pipe.load_lora_weights("latent-consistency/lcm-lora-sdv1-5", adapter_name="lcm") #Stable  Diffusion 1.5 のLCM LoRA
     pipe.set_adapters(["lcm"], adapter_weights=[1.0])
 
