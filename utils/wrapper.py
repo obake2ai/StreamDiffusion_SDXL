@@ -15,7 +15,8 @@ from diffusers import (
 )
 from PIL import Image
 
-from streamdiffusion import StreamDiffusion, StreamDiffusionControlNet
+from streamdiffusion import StreamDiffusion
+#from streamdiffusion import StreamDiffusion, StreamDiffusionControlNet
 from streamdiffusion.image_utils import postprocess_image
 
 torch.set_grad_enabled(False)
