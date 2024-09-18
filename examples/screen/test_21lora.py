@@ -126,7 +126,7 @@ def image_generation_process(
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
-        t_index_list=[0],
+        t_index_list=[32, 45],
         frame_buffer_size=frame_buffer_size,
         width=width,  # widthを正しく指定
         height=height,  # heightを正しく指定
@@ -197,7 +197,7 @@ def main(
     frame_buffer_size: int = 1,
     width: int = 512,
     height: int = 512,
-    acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+    acceleration: Literal["none", "xformers", "tensorrt"] = "xformers",
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "self",
