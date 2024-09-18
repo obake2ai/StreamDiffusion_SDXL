@@ -13,7 +13,7 @@ import mss
 import fire
 import tkinter as tk
 import cv2
-
+import traceback
 from screeninfo import get_monitors
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
