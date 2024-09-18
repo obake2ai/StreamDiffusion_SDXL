@@ -649,7 +649,7 @@ def image_generation_process(
     #パラメタ
     ######################################################
     adapter = True
-    ip_adapter_image_filepath="../assets/img2img_example.png"
+    ip_adapter_image_filepath="assets/img2img_example.png"
 
     t_index_list=[0, 16, 32, 45]
     #t_index_list=[0, 30, 45]
