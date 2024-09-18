@@ -697,7 +697,7 @@ def image_generation_process(
         pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models",
                              weight_name="ip-adapter_sd15.bin",
                              torch_dtype=torch.float16)
-        pipe.set_ip_adapter_scale(1.0)
+        pipe.set_ip_adapter_scale(0.8)
 
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
@@ -821,7 +821,7 @@ def main(
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "none",
-    guidance_scale: float = 1.4,
+    guidance_scale: float = 1.0,
     delta: float = 0.5,
     do_add_noise: bool = False,
     enable_similar_image_filter: bool = True,
