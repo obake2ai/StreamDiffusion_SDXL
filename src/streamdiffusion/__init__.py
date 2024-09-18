@@ -1,1 +1,2 @@
-from .pipeline import StreamDiffusion, StreamDiffusionControlNet
+from .pipeline import StreamDiffusion
+from .pipeline import StreamDiffusionControlNet
