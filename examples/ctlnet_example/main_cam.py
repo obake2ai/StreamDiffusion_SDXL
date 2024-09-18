@@ -658,6 +658,7 @@ def image_generation_process(
     similar_image_filter_threshold: float,
     similar_image_filter_max_skip_frame: float,
     monitor_receiver: Connection,
+    engine_dir: Optional[Union[str, Path]] = "engines",
     prompt_queue
 ) -> None:
     """
@@ -773,7 +774,7 @@ def image_generation_process(
                 else:
                     return f"{model_id_or_path}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}--mode-{self.mode}"
 
-            engine_dir = Path(self.engine_dir)
+            engine_dir = Path(engine_dir)
             unet_path = os.path.join(
                 engine_dir,
                 create_prefix(
