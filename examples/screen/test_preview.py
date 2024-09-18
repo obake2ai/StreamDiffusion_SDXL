@@ -10,10 +10,10 @@ def dummy_image_generation_process(queue, result_queue):
     while True:
         try:
             frame_tensor = queue.get()
-            if frame_tensor is None:  # プロセス終了のシグナル
+            if frame_tensor is None:  # Process termination signal
                 break
 
-            # ダミーの画像生成処理
+            # Dummy image generation processing
             result_queue.put(frame_tensor)
         except Exception as e:
             print(f"Error in dummy_image_generation_process: {e}")
@@ -22,15 +22,15 @@ def dummy_image_generation_process(queue, result_queue):
     print("Exiting dummy_image_generation_process")
 
 def preview_video_with_generation(video_path):
-    # 動画ファイルを開く
+    # Open the video file
     cap = cv2.VideoCapture(video_path)
 
-    # 動画が開けなかった場合のエラーチェック
+    # Error check if the video cannot be opened
     if not cap.isOpened():
         print(f"Error: Could not open video file {video_path}")
         return
 
-    # 生成プロセスの設定
+    # Setup the generation process
     ctx = get_context('spawn')
     queue = ctx.Queue()
     result_queue = ctx.Queue()
@@ -41,40 +41,42 @@ def preview_video_with_generation(video_path):
     )
     process.start()
 
-    # 動画のフレームを1つずつ表示
+    # Iterate over video frames
     while True:
         ret, frame = cap.read()
 
-        # フレームが読み込めなかった場合はループを終了
+        # End loop if frame cannot be read
         if not ret:
             print("End of video or cannot read the frame.")
             break
 
-        # フレームを PIL.Image に変換して tensor に変換
+        # Convert frame to PIL.Image and then to tensor
         img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         frame_tensor = pil2tensor(img)
 
-        # フレームを生成プロセスに渡す
+        # Send frame to generation process
         queue.put(frame_tensor)
 
-        # 生成された画像を取得
+        # Retrieve generated image
         if not result_queue.empty():
             output_image = result_queue.get()
             output_image = output_image.permute(1, 2, 0).numpy()
             output_image = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
-            cv2.imshow('Generated Video Preview', output_image)
+            # Instead of imshow, write the frame to a file or process it further
+            # For example, save the frame as an image file
+            cv2.imwrite('output_frame.jpg', output_image)
 
-        # 'q' キーが押されたら終了
-        if cv2.waitKey(30) & 0xFF == ord('q'):
+        # Remove or adjust the waitKey if not displaying the frame
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-    # リソースを解放
+    # Release resources
     cap.release()
     cv2.destroyAllWindows()
-    queue.put(None)  # プロセス終了シグナル
-    process.join()   # プロセスの終了を待機
+    queue.put(None)  # Process termination signal
+    process.join()   # Wait for the process to finish
 
 if __name__ == '__main__':
-    # テスト用の動画ファイルのパスを指定
+    # Specify the path to the test video file
     video_path = 'assets/0710_MPtestsozai.mp4'
     preview_video_with_generation(video_path)
