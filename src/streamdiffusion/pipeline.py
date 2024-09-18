@@ -12,6 +12,7 @@ from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img impo
 
 from streamdiffusion.image_filter import SimilarImageFilter
 
+from PIL import Image
 
 class StreamDiffusion:
     def __init__(
