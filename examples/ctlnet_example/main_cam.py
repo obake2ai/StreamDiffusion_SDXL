@@ -738,6 +738,10 @@ def image_generation_process(
         # 初期画像の準備
         ip_adapter_image = load_image(ip_adapter_image_filepath)
 
+
+    ### TODO: 高速化
+    stream.pipe.enable_xformers_memory_efficient_attention()
+
     stream.prepare(
         prompt=box_prompt,
         negative_prompt=negative_prompt,
