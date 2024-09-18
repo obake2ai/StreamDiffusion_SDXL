@@ -125,7 +125,7 @@ class StreamDiffusionControlNetWrapper:
         engine_dir: Optional[Union[str, Path]] = "engines",
         ip_adapter_model_id_or_path: Optional[str] = None,
         ip_adapter_scale: float = 1.0,
-    ) -> StreamDiffusionControlNetWrapper:
+    ) -> StreamDiffusionControlNet:
         # モデルの読み込みと初期化
         if "xl" in model_id_or_path:
             base_pipeline_cls = StableDiffusionXLPipeline
