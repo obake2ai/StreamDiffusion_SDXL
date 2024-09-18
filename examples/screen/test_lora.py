@@ -195,8 +195,8 @@ def main(
     prompt: str = "xshingoboy, a cartoon of a boy with a cat on his shoulder",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
-    width: int = 1280,  # 高解像度に設定
-    height: int = 720,  # 高解像度に設定
+    width: int = 512,
+    height: int = 512,
     acceleration: Literal["none", "xformers", "tensorrt"] = "xformers",
     use_denoising_batch: bool = True,
     seed: int = 2,
