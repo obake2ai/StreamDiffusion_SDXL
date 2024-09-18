@@ -875,6 +875,68 @@ class StreamDiffusionControlNet(StreamDiffusion):
 
         return x_0_pred_out
 
+    @torch.no_grad()
+    def img2img_controlnet(
+        self,
+        image: torch.Tensor,
+        controlnet_conditioning_image: torch.Tensor,
+        ip_adapter_image: Optional[Image.Image] = None,
+    ) -> torch.Tensor:
+        """
+        Performs img2img with ControlNet conditioning.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            The input image tensor.
+        controlnet_conditioning_image : torch.Tensor
+            The conditioning image tensor for ControlNet.
+        ip_adapter_image : Optional[Image.Image], optional
+            The IP-Adapter image, if used.
+
+        Returns
+        -------
+        torch.Tensor
+            The generated image tensor.
+        """
+
+        # 1. 入力画像を latent space にエンコード
+        init_latent = self.pipe.vae.encode(image).latent_dist.sample(generator=self.generator)
+        init_latent = init_latent * self.pipe.vae.config.scaling_factor
+
+        # 2. ノイズを加える（必要に応じて）
+        noise = torch.randn_like(init_latent)
+        t = self.scheduler.timesteps[0]
+        init_latent = self.scheduler.add_noise(init_latent, noise, t)
+
+        # 3. ControlNet の conditioning image を準備
+        if controlnet_conditioning_image is not None:
+            controlnet_cond = controlnet_conditioning_image
+        else:
+            controlnet_cond = image  # デフォルトで入力画像を使用
+
+        # 4. 追加の条件（IP-Adapterなど）を設定
+        added_cond_kwargs = self.added_cond_kwargs if hasattr(self, 'added_cond_kwargs') else {}
+
+        # 5. 画像生成プロセスを実行
+        latents = init_latent.clone()
+        for i, t in enumerate(self.scheduler.timesteps):
+            # U-Net の出力を計算
+            noise_pred = self.pipe.unet(
+                latents,
+                t,
+                encoder_hidden_states=self.prompt_embeds,
+                controlnet_cond=controlnet_cond,
+                **added_cond_kwargs,
+            ).sample
+
+            # スケジューラーで次のステップの latent を計算
+            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+
+        # 6. latent を画像にデコード
+        generated_image = self.pipe.decode_latents(latents)
+
+        return generated_image
 
     @torch.no_grad()
     def ctlimg2img(self, batch_size: int = 1, ctlnet_image = None, keep_latent = False) -> torch.Tensor:
