@@ -192,8 +192,8 @@ def image_generation_process(
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
     lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors":1.0},
-    prompt: str = "xshingoboy, a cartoon of a boy with a cat on his shoulder",
-    negative_prompt: str = "low quality, bad quality, blurry, low resolution",
+    prompt: str = "(((xshingoboy)))",
+    negative_prompt: str = "man, boy, anime, low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
     width: int = 512,
     height: int = 512,
