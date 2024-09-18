@@ -8,7 +8,7 @@ from typing import List, Literal, Dict, Optional
 
 import torch
 import PIL.Image
-from streamdiffusion.image_utils import pil2tensor
+from src.streamdiffusion.image_utils import pil2tensor
 import fire
 import tkinter as tk
 import cv2  # OpenCVを使用してカメラからの画像を取得
