@@ -658,7 +658,7 @@ def image_generation_process(
     similar_image_filter_threshold: float,
     similar_image_filter_max_skip_frame: float,
     monitor_receiver: Connection,
-    engine_dir: Optional[Union[str, Path]] = "engines",
+    engine_dir: Optional[Union[str, Path]],
     prompt_queue
 ) -> None:
     """
@@ -1015,6 +1015,7 @@ def main(
     enable_similar_image_filter: bool = True,
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
+    engine_dir: Optional[Union[str, Path]] = "engines"
 ) -> None:
     """
     メイン関数
@@ -1061,6 +1062,7 @@ def main(
             similar_image_filter_threshold,
             similar_image_filter_max_skip_frame,
             monitor_receiver,
+            engine_dir,
             prompt_queue
         ),
     )
