@@ -509,7 +509,7 @@ def camera(
         monitor_y = monitor_info['top']
         cv2.moveWindow("Camera Input", monitor_x, monitor_y)
         # ウィンドウサイズをモニターサイズに合わせる
-        cv2.resizeWindow("Camera Input", monitor_info['width'], monitor_info['height'])
+        cv2.resizeWindow("Camera Input", width, height)
 
     try:
         while True:
@@ -535,19 +535,9 @@ def camera(
             bottom_crop = top_crop + height
             img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
 
-            # Resize cropped image to fit the monitor window size while keeping aspect ratio
+            # Resize cropped image to fit the monitor window size
             if monitor_info:
-                monitor_width = monitor_info['width']
-                monitor_height = monitor_info['height']
-                img_cropped.thumbnail((monitor_width, monitor_height), PIL.Image.ANTIALIAS)
-
-                # Create a new image with the monitor's size and paste the resized image onto it
-                img_resized = PIL.Image.new("RGB", (monitor_width, monitor_height), (0, 0, 0))
-                paste_position = (
-                    (monitor_width - img_cropped.width) // 2,
-                    (monitor_height - img_cropped.height) // 2,
-                )
-                img_resized.paste(img_cropped, paste_position)
+                img_resized = img_cropped.resize((monitor_info['width'], monitor_info['height']))
             else:
                 img_resized = img_cropped
 
@@ -567,6 +557,7 @@ def camera(
         cap.release()
         cv2.destroyWindow("Camera Input")
         print('exit : camera')
+
 
 
 def dummy_screen(
