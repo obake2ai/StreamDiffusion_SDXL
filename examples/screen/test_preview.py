@@ -1,5 +1,3 @@
-import os
-import sys
 import cv2
 import threading
 import time
@@ -8,55 +6,22 @@ import PIL.Image
 from multiprocessing import Process, Queue, get_context
 from streamdiffusion.image_utils import pil2tensor
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-from utils.wrapper import StreamDiffusionWrapper
-
-
-def image_generation_process(queue, result_queue, model_id_or_path, prompt, negative_prompt, width, height):
-    # StreamDiffusionWrapper の設定
-    stream = StreamDiffusionWrapper(
-        model_id_or_path=model_id_or_path,
-        lora_dict=None,  # 必要に応じて指定
-        t_index_list=[32, 45],
-        frame_buffer_size=1,
-        width=width,
-        height=height,
-        warmup=10,
-        acceleration="xformers",
-        do_add_noise=False,
-        enable_similar_image_filter=False,
-        similar_image_filter_threshold=0.99,
-        similar_image_filter_max_skip_frame=10,
-        mode="img2img",
-        use_denoising_batch=True,
-        cfg_type="self",
-        seed=2,
-    )
-
-    stream.prepare(
-        prompt=prompt,
-        negative_prompt=negative_prompt,
-        num_inference_steps=50,
-        guidance_scale=1.4,
-        delta=0.5,
-    )
-
+def dummy_image_generation_process(queue, result_queue):
     while True:
         try:
             frame_tensor = queue.get()
             if frame_tensor is None:  # プロセス終了のシグナル
                 break
-            input_batch = frame_tensor.unsqueeze(0).to(device=stream.device, dtype=stream.dtype)
-            output_image = stream.stream(input_batch)[0].cpu()
-            result_queue.put(output_image)
+
+            # ダミーの画像生成処理
+            result_queue.put(frame_tensor)
         except Exception as e:
-            print(f"Error in image_generation_process: {e}")
+            print(f"Error in dummy_image_generation_process: {e}")
             break
 
-    print("Exiting image_generation_process")
+    print("Exiting dummy_image_generation_process")
 
-def preview_video_with_generation(video_path, model_id_or_path, prompt, negative_prompt):
+def preview_video_with_generation(video_path):
     # 動画ファイルを開く
     cap = cv2.VideoCapture(video_path)
 
@@ -71,8 +36,8 @@ def preview_video_with_generation(video_path, model_id_or_path, prompt, negative
     result_queue = ctx.Queue()
 
     process = ctx.Process(
-        target=image_generation_process,
-        args=(queue, result_queue, model_id_or_path, prompt, negative_prompt, int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        target=dummy_image_generation_process,
+        args=(queue, result_queue)
     )
     process.start()
 
@@ -95,7 +60,6 @@ def preview_video_with_generation(video_path, model_id_or_path, prompt, negative
         # 生成された画像を取得
         if not result_queue.empty():
             output_image = result_queue.get()
-            # バッチ次元を削除して numpy 配列に変換
             output_image = output_image.permute(1, 2, 0).numpy()
             output_image = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
             cv2.imshow('Generated Video Preview', output_image)
@@ -113,8 +77,4 @@ def preview_video_with_generation(video_path, model_id_or_path, prompt, negative
 if __name__ == '__main__':
     # テスト用の動画ファイルのパスを指定
     video_path = 'assets/0710_MPtestsozai.mp4'
-    model_id_or_path = "Lykon/AnyLoRA"  # モデルIDまたはパス
-    prompt = "xshingoboy"
-    negative_prompt = "low quality, bad quality, blurry, low resolution"
-
-    preview_video_with_generation(video_path, model_id_or_path, prompt, negative_prompt)
+    preview_video_with_generation(video_path)
