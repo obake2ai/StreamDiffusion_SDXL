@@ -94,5 +94,6 @@ def pil2tensor(image_pil: PIL.Image.Image) -> torch.Tensor:
     images = torch.nn.functional.interpolate(
         imgs, size=(height, width), mode="bilinear"
     )
-    image_tensors = images.to(torch.float16)
+    #image_tensors = images.to(torch.float16)
+    image_tensors = images.to(dtype=torch.float32)
     return image_tensors
