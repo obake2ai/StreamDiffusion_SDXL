@@ -48,7 +48,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                  use_denoising_batch: bool = True,
                  frame_buffer_size: int = 1,
                  cfg_type: Literal["none", "full", "self", "initialize"] = "self",
-                 acceleration: Literal["none", "xformers", "tensorrt"],
+                 acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
                  engine_dir: Optional[Union[str, Path]] = "engines",
                  ip_adapter=None):
         super().__init__(pipe,
