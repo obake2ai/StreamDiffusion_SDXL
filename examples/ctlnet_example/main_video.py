@@ -733,7 +733,6 @@ def camera(
         cv2.destroyWindow("Camera Input")
         print('exit : camera')
 
-
 def read_video(
     event: threading.Event(),
     video_file_path: str,
@@ -769,8 +768,9 @@ def read_video(
 
             ret, frame = cap.read()
             if not ret:
-                print("End of video file reached or can't receive frame. Exiting ...")
-                break
+                print("End of video file reached. Restarting video.")
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
+                continue
 
             # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -804,7 +804,6 @@ def read_video(
         cap.release()
         cv2.destroyWindow("Video Input")
         print('exit : read_video')
-
 
 
 def dummy_screen(
