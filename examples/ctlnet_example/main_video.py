@@ -632,7 +632,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         return x_output
 
 
-UPEER_FPS = 40
+UPEER_FPS = 100
 fps_interval = 1.0 / UPEER_FPS
 inputs = []
 top = 0
