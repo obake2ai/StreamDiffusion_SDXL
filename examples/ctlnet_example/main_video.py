@@ -256,13 +256,13 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                     if maybe_path.exists():
                         return f"{maybe_path.stem}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}"
                     else:
-                        return f"{model_id_or_path}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}"
+                        return f"{self.model_id_or_path}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}"
 
                 engine_dir = Path(self.engine_dir)
                 unet_path = os.path.join(
                     engine_dir,
                     create_prefix(
-                        model_id_or_path=model_id_or_path,
+                        model_id_or_path=self.model_id_or_path,
                         max_batch_size=stream.trt_unet_batch_size,
                         min_batch_size=stream.trt_unet_batch_size,
                     ),
@@ -271,7 +271,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 vae_encoder_path = os.path.join(
                     engine_dir,
                     create_prefix(
-                        model_id_or_path=model_id_or_path,
+                        model_id_or_path=self.model_id_or_path,
                         max_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
@@ -284,7 +284,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 vae_decoder_path = os.path.join(
                     engine_dir,
                     create_prefix(
-                        model_id_or_path=model_id_or_path,
+                        model_id_or_path=self.model_id_or_path,
                         max_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
