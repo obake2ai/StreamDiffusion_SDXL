@@ -263,8 +263,8 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                     engine_dir,
                     create_prefix(
                         model_id_or_path=self.model_id_or_path,
-                        max_batch_size=stream.trt_unet_batch_size,
-                        min_batch_size=stream.trt_unet_batch_size,
+                        max_batch_size=self.trt_unet_batch_size,
+                        min_batch_size=self.trt_unet_batch_size,
                     ),
                     "unet.engine",
                 )
@@ -274,10 +274,10 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                         model_id_or_path=self.model_id_or_path,
                         max_batch_size=self.batch_size
                         if self.mode == "txt2img"
-                        else stream.frame_bff_size,
+                        else self.frame_bff_size,
                         min_batch_size=self.batch_size
                         if self.mode == "txt2img"
-                        else stream.frame_bff_size,
+                        else self.frame_bff_size,
                     ),
                     "vae_encoder.engine",
                 )
@@ -287,10 +287,10 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                         model_id_or_path=self.model_id_or_path,
                         max_batch_size=self.batch_size
                         if self.mode == "txt2img"
-                        else stream.frame_bff_size,
+                        else self.frame_bff_size,
                         min_batch_size=self.batch_size
                         if self.mode == "txt2img"
-                        else stream.frame_bff_size,
+                        else self.frame_bff_size,
                     ),
                     "vae_decoder.engine",
                 )
@@ -299,19 +299,19 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                     os.makedirs(os.path.dirname(unet_path), exist_ok=True)
                     unet_model = UNet(
                         fp16=True,
-                        device=stream.device,
-                        max_batch_size=stream.trt_unet_batch_size,
-                        min_batch_size=stream.trt_unet_batch_size,
-                        embedding_dim=stream.text_encoder.config.hidden_size,
-                        unet_dim=stream.unet.config.in_channels,
+                        device=self.device,
+                        max_batch_size=self.trt_unet_batch_size,
+                        min_batch_size=self.trt_unet_batch_size,
+                        embedding_dim=self.text_encoder.config.hidden_size,
+                        unet_dim=self.unet.config.in_channels,
                     )
                     compile_unet(
-                        stream.unet,
+                        self.unet,
                         unet_model,
                         unet_path + ".onnx",
                         unet_path + ".opt.onnx",
                         unet_path,
-                        opt_batch_size=stream.trt_unet_batch_size,
+                        opt_batch_size=self.trt_unet_batch_size,
                     )
 
                 if not os.path.exists(vae_decoder_path):
@@ -1088,7 +1088,7 @@ def main(
     frame_buffer_size: int = 1,
     width: int = 512,
     height: int = 512,
-    acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+    acceleration: Literal["none", "xformers", "tensorrt"] = "xformers",
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "none",
