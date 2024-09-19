@@ -83,7 +83,8 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         generator: Optional[torch.Generator] = torch.Generator(),
         seed: int = 2,
         ip_adapter_image=None,
-        target_image_weight: float = 0.0,
+        target_image_weight: float = 0.5,
+        initial_steps_ratio: float = 0.3,
     ) -> None:
         self.do_classifier_free_guidance = False
         if self.cfg_type == "none":
@@ -93,6 +94,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.delta = delta
         self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
         self.target_image_weight = target_image_weight
+        self.initial_steps_ratio = initial_steps_ratio
 
         # IPAdapterのため
         if self.ip_adapter:
@@ -622,11 +624,19 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         ctlnet_image = timage
 
-        if self.ip_adapter and self.added_cond_kwargs and 'image_embeds' in self.added_cond_kwargs:
-            image_embeds = self.added_cond_kwargs['image_embeds']
-            image_embeds = image_embeds * self.target_image_weight
-            self.added_cond_kwargs['image_embeds'] = image_embeds
-        x_0_pred_out = self.predict_x0_batch(self.input_latent, ctlnet_image)
+        total_steps = len(self.t_index_list)
+        initial_steps = int(self.initial_steps_ratio * total_steps)
+
+        for step_idx in range(total_steps):
+            if step_idx < initial_steps:
+                # 初期ステップではターゲットイメージを強く残す
+                blended_image = ctlnet_image
+            else:
+                # それ以降のステップでは通常の処理
+                blended_image = self.added_cond_kwargs['image_embeds'] if self.ip_adapter else ctlnet_image
+
+            x_0_pred_out = self.predict_x0_batch(self.input_latent, blended_image)
+
 
         tstart = time.time()
         x_output = self.decode_image(x_0_pred_out).detach().clone()
