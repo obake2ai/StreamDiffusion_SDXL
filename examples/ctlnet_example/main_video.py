@@ -83,7 +83,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         generator: Optional[torch.Generator] = torch.Generator(),
         seed: int = 2,
         ip_adapter_image=None,
-        target_image_weight: float = 0.5,
+        target_image_weight: float = 0.0,
     ) -> None:
         self.do_classifier_free_guidance = False
         if self.cfg_type == "none":
@@ -621,7 +621,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             )
 
         ctlnet_image = timage
-        
+
         if self.ip_adapter and self.added_cond_kwargs and 'image_embeds' in self.added_cond_kwargs:
             image_embeds = self.added_cond_kwargs['image_embeds']
             image_embeds = image_embeds * self.target_image_weight
