@@ -632,6 +632,11 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         # ctlnet_image のサイズを x_t_latent のサイズにリサイズ
         ctlnet_image = F.interpolate(timage, size=(self.latent_height, self.latent_width), mode='bilinear', align_corners=False)
 
+        if ctlnet_image.shape[1] == 3:  # チャネル数が3のとき
+            # 1チャンネル追加して4チャンネルに
+            ctlnet_image = torch.cat([ctlnet_image, torch.zeros_like(ctlnet_image[:, :1, :, :])], dim=1)
+
+
         print(f"x_t_latent shape: {self.input_latent.shape}")
         print(f"ctlnet_image shape: {ctlnet_image.shape}")
 
