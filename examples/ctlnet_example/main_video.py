@@ -83,7 +83,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         generator: Optional[torch.Generator] = torch.Generator(),
         seed: int = 2,
         ip_adapter_image=None,
-        target_image_weight: float = 0.5,
+        target_image_weight: float = 0.6,
         initial_steps_ratio: float = 0.3,
     ) -> None:
         self.do_classifier_free_guidance = False
