@@ -50,6 +50,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                  cfg_type: Literal["none", "full", "self", "initialize"] = "self",
                  acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
                  engine_dir: Optional[Union[str, Path]] = "engines",
+                 model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
                  ip_adapter=None):
         super().__init__(pipe,
                          t_index_list,
@@ -69,6 +70,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.added_cond_kwargs = None
         self.acceleration = acceleration
         self.engine_dir = engine_dir
+        self.model_id_or_path = model_id_or_path
 
     @torch.no_grad()
     def prepare(
@@ -250,7 +252,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                     max_batch_size: int,
                     min_batch_size: int,
                 ):
-                    maybe_path = Path(model_id_or_path)
+                    maybe_path = Path(self.model_id_or_path)
                     if maybe_path.exists():
                         return f"{maybe_path.stem}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}"
                     else:
@@ -970,6 +972,7 @@ def image_generation_process(
         height=height,
         ip_adapter=adapter,
         acceleration=acceleration,
+        model_id_or_path=model_id_or_path,
     )
 
     # LoRAの読み込み
