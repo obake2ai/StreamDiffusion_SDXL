@@ -67,6 +67,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.input_latent = None
         self.ctl_image_t_buffer = None
         self.added_cond_kwargs = None
+        self.acceleration = acceleration
 
     @torch.no_grad()
     def prepare(
@@ -223,9 +224,9 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         ### TODO: 高速化
         try:
-            if acceleration == "xformers":
+            if self.acceleration == "xformers":
                 stream.pipe.enable_xformers_memory_efficient_attention()
-            if acceleration == "tensorrt":
+            if self.acceleration == "tensorrt":
                 from polygraphy import cuda
                 from streamdiffusion.acceleration.tensorrt import (
                     TorchVAEEncoder,
@@ -379,7 +380,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 torch.cuda.empty_cache()
 
                 print("TensorRT acceleration enabled.")
-                if acceleration == "sfast":
+                if self.acceleration == "sfast":
                     from streamdiffusion.acceleration.sfast import (
                         accelerate_with_stable_fast,
                     )
