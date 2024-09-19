@@ -915,7 +915,7 @@ def image_generation_process(
 
     global inputs
     global box_prompt
-    instep = 30
+    instep = 40
     ######################################################
     # パラメタ
     ######################################################
@@ -960,7 +960,7 @@ def image_generation_process(
         pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models",
                              weight_name="ip-adapter_sd15.bin",
                              torch_dtype=torch.float16)
-        pipe.set_ip_adapter_scale(0.9)
+        pipe.set_ip_adapter_scale(0.7)
 
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
