@@ -30,8 +30,6 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 
-import torch.nn.functional as F
-
 ###############################################
 # プロンプトはここ
 ###############################################
@@ -97,7 +95,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
         self.target_image_weight = target_image_weight
         self.initial_steps_ratio = initial_steps_ratio
-        self.num_inference_steps = num_inference_steps
 
         # IPAdapterのため
         if self.ip_adapter:
@@ -612,7 +609,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         num_images_per_prompt = 1
         batch_size = 1
         guess_mode = False
-        if self.pipe.controlnet is not None:
+        if self.pipe.controlnet != None:
             timage = self.pipe.prepare_image(
                 image=ctlnet_image,
                 width=self.width,
@@ -625,35 +622,15 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 guess_mode=guess_mode,
             )
 
-        # ctlnet_image の次元数を確認し、リサイズを適用
-        if timage.dim() == 3:  # (C, H, W) の場合
-            timage = timage.unsqueeze(0)  # バッチ次元を追加: (1, C, H, W)
+        ctlnet_image = timage
 
-        # ctlnet_image のサイズを x_t_latent のサイズにリサイズ
-        ctlnet_image = F.interpolate(timage, size=(self.latent_height, self.latent_width), mode='bilinear', align_corners=False)
+        if self.ip_adapter and self.added_cond_kwargs and 'image_embeds' in self.added_cond_kwargs:
+            image_embeds = self.added_cond_kwargs['image_embeds']
+            image_embeds = image_embeds * self.target_image_weight
+            self.added_cond_kwargs['image_embeds'] = image_embeds
+        x_0_pred_out = self.predict_x0_batch(self.input_latent, ctlnet_image)
 
-        if ctlnet_image.shape[1] == 3:  # チャネル数が3のとき
-            # 1チャンネル追加して4チャンネルに
-            ctlnet_image = torch.cat([ctlnet_image, torch.zeros_like(ctlnet_image[:, :1, :, :])], dim=1)
-
-
-        print(f"x_t_latent shape: {self.input_latent.shape}")
-        print(f"ctlnet_image shape: {ctlnet_image.shape}")
-
-        # 追加: 初期ステップの割合に基づいてターゲットイメージを適用
-        total_steps = self.num_inference_steps  # 修正: num_inference_steps を使用
-        initial_steps = int(self.initial_steps_ratio * total_steps)
-
-        for step_idx in range(total_steps):
-            if step_idx < initial_steps:
-                # 初期ステップではターゲットイメージを強く残す
-                blended_image = ctlnet_image
-            else:
-                # それ以降のステップでは通常の処理
-                blended_image = self.added_cond_kwargs['image_embeds'] if self.ip_adapter else ctlnet_image
-
-            x_0_pred_out = self.predict_x0_batch(self.input_latent, blended_image)
-
+        tstart = time.time()
         x_output = self.decode_image(x_0_pred_out).detach().clone()
 
         tstart = time.time()
