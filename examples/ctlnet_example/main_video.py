@@ -729,6 +729,8 @@ def image_generation_process(
     engine_dir: Optional[Union[str, Path]],
     prompt_queue,
     video_file_path: Optional[str] = None,
+    use_lcm_lora: bool = True,
+    use_tiny_vae: bool = True,
 ) -> None:
     """
     画像生成プロセスの関数
