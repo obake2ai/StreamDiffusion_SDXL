@@ -625,8 +625,12 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 guess_mode=guess_mode,
             )
 
+        # ctlnet_image の次元数を確認し、リサイズを適用
+        if timage.dim() == 3:  # (C, H, W) の場合
+            timage = timage.unsqueeze(0)  # バッチ次元を追加: (1, C, H, W)
+
         # ctlnet_image のサイズを x_t_latent のサイズにリサイズ
-        ctlnet_image = F.interpolate(timage, size=(self.latent_height, self.latent_width), mode='bilinear', align_corners=False)  # 修正: interpolateでリサイズ
+        ctlnet_image = F.interpolate(timage, size=(self.latent_height, self.latent_width), mode='bilinear', align_corners=False)
 
         # 追加: 初期ステップの割合に基づいてターゲットイメージを適用
         total_steps = self.num_inference_steps  # 修正: num_inference_steps を使用
@@ -640,11 +644,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 # それ以降のステップでは通常の処理
                 blended_image = self.added_cond_kwargs['image_embeds'] if self.ip_adapter else ctlnet_image
 
-                # 参考画像が指定されている場合は適切にバッチ処理
-                if self.ip_adapter:
-                    # 4次元テンソルに変更し、ctlnet_image のバッチ数と一致させる
-                    blended_image = blended_image.unsqueeze(0).repeat(batch_size, 1, 1, 1)
-
             x_0_pred_out = self.predict_x0_batch(self.input_latent, blended_image)
 
         x_output = self.decode_image(x_0_pred_out).detach().clone()
@@ -657,6 +656,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         inference_time = start.elapsed_time(end) / 1000
         self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
         return x_output
+
 
 UPEER_FPS = 100
 fps_interval = 1.0 / UPEER_FPS
