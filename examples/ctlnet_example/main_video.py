@@ -922,7 +922,7 @@ def image_generation_process(
     adapter = True
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list = [0, 25]
+    t_index_list = [0, 10, 35]
     cfg_type = "none"
     delta = 1.0
 
