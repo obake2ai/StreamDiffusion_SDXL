@@ -590,73 +590,73 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         return x_0_pred_out
 
-@torch.no_grad()
-def ctlimg2img(self, batch_size: int = 1, ctlnet_image=None, keep_latent=False) -> torch.Tensor:
-    if not keep_latent:
-        self.input_latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
-            device=self.device, dtype=self.dtype
-        )
-    else:
-        if self.input_latent is None:
-            latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
+    @torch.no_grad()
+    def ctlimg2img(self, batch_size: int = 1, ctlnet_image=None, keep_latent=False) -> torch.Tensor:
+        if not keep_latent:
+            self.input_latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
                 device=self.device, dtype=self.dtype
             )
-            self.input_latent = latent
-
-    start = torch.cuda.Event(enable_timing=True)
-    end = torch.cuda.Event(enable_timing=True)
-    start.record()
-    tstart = time.time()
-
-    # コントロールネット用の計算
-    num_images_per_prompt = 1
-    batch_size = 1
-    guess_mode = False
-    if self.pipe.controlnet is not None:
-        timage = self.pipe.prepare_image(
-            image=ctlnet_image,
-            width=self.width,
-            height=self.height,
-            batch_size=batch_size * num_images_per_prompt,
-            num_images_per_prompt=num_images_per_prompt,
-            device=self.device,
-            dtype=self.controlnet.dtype,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            guess_mode=guess_mode,
-        )
-
-    # ctlnet_image のサイズを x_t_latent のサイズにリサイズ
-    ctlnet_image = F.interpolate(timage, size=(self.latent_height, self.latent_width), mode='bilinear', align_corners=False)  # 修正: interpolateでリサイズ
-
-    # 追加: 初期ステップの割合に基づいてターゲットイメージを適用
-    total_steps = self.num_inference_steps  # 修正: num_inference_steps を使用
-    initial_steps = int(self.initial_steps_ratio * total_steps)
-
-    for step_idx in range(total_steps):
-        if step_idx < initial_steps:
-            # 初期ステップではターゲットイメージを強く残す
-            blended_image = ctlnet_image
         else:
-            # それ以降のステップでは通常の処理
-            blended_image = self.added_cond_kwargs['image_embeds'] if self.ip_adapter else ctlnet_image
+            if self.input_latent is None:
+                latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
+                    device=self.device, dtype=self.dtype
+                )
+                self.input_latent = latent
 
-            # 参考画像が指定されている場合は適切にバッチ処理
-            if self.ip_adapter:
-                # 4次元テンソルに変更し、ctlnet_image のバッチ数と一致させる
-                blended_image = blended_image.unsqueeze(0).repeat(batch_size, 1, 1, 1)
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+        tstart = time.time()
 
-        x_0_pred_out = self.predict_x0_batch(self.input_latent, blended_image)
+        # コントロールネット用の計算
+        num_images_per_prompt = 1
+        batch_size = 1
+        guess_mode = False
+        if self.pipe.controlnet is not None:
+            timage = self.pipe.prepare_image(
+                image=ctlnet_image,
+                width=self.width,
+                height=self.height,
+                batch_size=batch_size * num_images_per_prompt,
+                num_images_per_prompt=num_images_per_prompt,
+                device=self.device,
+                dtype=self.controlnet.dtype,
+                do_classifier_free_guidance=self.do_classifier_free_guidance,
+                guess_mode=guess_mode,
+            )
 
-    x_output = self.decode_image(x_0_pred_out).detach().clone()
+        # ctlnet_image のサイズを x_t_latent のサイズにリサイズ
+        ctlnet_image = F.interpolate(timage, size=(self.latent_height, self.latent_width), mode='bilinear', align_corners=False)  # 修正: interpolateでリサイズ
 
-    tstart = time.time()
+        # 追加: 初期ステップの割合に基づいてターゲットイメージを適用
+        total_steps = self.num_inference_steps  # 修正: num_inference_steps を使用
+        initial_steps = int(self.initial_steps_ratio * total_steps)
 
-    self.prev_image_result = x_output
-    end.record()
-    torch.cuda.synchronize()
-    inference_time = start.elapsed_time(end) / 1000
-    self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
-    return x_output
+        for step_idx in range(total_steps):
+            if step_idx < initial_steps:
+                # 初期ステップではターゲットイメージを強く残す
+                blended_image = ctlnet_image
+            else:
+                # それ以降のステップでは通常の処理
+                blended_image = self.added_cond_kwargs['image_embeds'] if self.ip_adapter else ctlnet_image
+
+                # 参考画像が指定されている場合は適切にバッチ処理
+                if self.ip_adapter:
+                    # 4次元テンソルに変更し、ctlnet_image のバッチ数と一致させる
+                    blended_image = blended_image.unsqueeze(0).repeat(batch_size, 1, 1, 1)
+
+            x_0_pred_out = self.predict_x0_batch(self.input_latent, blended_image)
+
+        x_output = self.decode_image(x_0_pred_out).detach().clone()
+
+        tstart = time.time()
+
+        self.prev_image_result = x_output
+        end.record()
+        torch.cuda.synchronize()
+        inference_time = start.elapsed_time(end) / 1000
+        self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
+        return x_output
 
 UPEER_FPS = 100
 fps_interval = 1.0 / UPEER_FPS
