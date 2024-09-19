@@ -82,7 +82,8 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         delta: float = 1.0,
         generator: Optional[torch.Generator] = torch.Generator(),
         seed: int = 2,
-        ip_adapter_image=None
+        ip_adapter_image=None,
+        target_image_weight: float = 0.5,
     ) -> None:
         self.do_classifier_free_guidance = False
         if self.cfg_type == "none":
@@ -91,6 +92,8 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             self.guidance_scale = guidance_scale
         self.delta = delta
         self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
+        self.target_image_weight = target_image_weight
+
         # IPAdapterのため
         if self.ip_adapter:
             ip_adapter_image = ip_adapter_image.resize((self.height, self.width))
@@ -618,7 +621,13 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
             )
 
         ctlnet_image = timage
+        
+        if self.ip_adapter and self.added_cond_kwargs and 'image_embeds' in self.added_cond_kwargs:
+            image_embeds = self.added_cond_kwargs['image_embeds']
+            image_embeds = image_embeds * self.target_image_weight
+            self.added_cond_kwargs['image_embeds'] = image_embeds
         x_0_pred_out = self.predict_x0_batch(self.input_latent, ctlnet_image)
+
         tstart = time.time()
         x_output = self.decode_image(x_0_pred_out).detach().clone()
 
