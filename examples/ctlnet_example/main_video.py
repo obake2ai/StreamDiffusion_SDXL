@@ -95,6 +95,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
         self.target_image_weight = target_image_weight
         self.initial_steps_ratio = initial_steps_ratio
+        self.num_inference_steps = num_inference_steps
 
         # IPAdapterのため
         if self.ip_adapter:
@@ -624,7 +625,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         ctlnet_image = timage
 
-        total_steps = len(self.t_index_list)
+        total_steps = self.num_inference_steps
         initial_steps = int(self.initial_steps_ratio * total_steps)
 
         for step_idx in range(total_steps):
