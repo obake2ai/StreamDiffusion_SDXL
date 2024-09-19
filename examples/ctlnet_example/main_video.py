@@ -632,6 +632,9 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         # ctlnet_image のサイズを x_t_latent のサイズにリサイズ
         ctlnet_image = F.interpolate(timage, size=(self.latent_height, self.latent_width), mode='bilinear', align_corners=False)
 
+        print(f"x_t_latent shape: {self.input_latent.shape}")
+        print(f"ctlnet_image shape: {ctlnet_image.shape}")
+
         # 追加: 初期ステップの割合に基づいてターゲットイメージを適用
         total_steps = self.num_inference_steps  # 修正: num_inference_steps を使用
         initial_steps = int(self.initial_steps_ratio * total_steps)
