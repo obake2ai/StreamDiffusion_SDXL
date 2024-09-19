@@ -740,6 +740,7 @@ def read_video(
     height: int = 512,
     width: int = 512,
     monitor_info: Dict[str, Any] = None,
+    resize_mode: bool = True,  # New parameter to control resizing
 ):
     global inputs
 
@@ -774,23 +775,25 @@ def read_video(
             # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-            # 画像を中央からクロップ
-            img_width, img_height = img.size
-            left_crop = (img_width - width) // 2
-            top_crop = (img_height - height) // 2
-            right_crop = left_crop + width
-            bottom_crop = top_crop + height
-            img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
-
-            # リサイズ（必要に応じて）
-            img_resized = img_cropped
+            if resize_mode:
+                # リサイズモードがTrueの場合、画像を指定サイズにリサイズ
+                img_resized = img.resize((width, height))
+            else:
+                # 画像を中央からクロップ
+                img_width, img_height = img.size
+                left_crop = (img_width - width) // 2
+                top_crop = (img_height - height) // 2
+                right_crop = left_crop + width
+                bottom_crop = top_crop + height
+                img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
+                img_resized = img_cropped
 
             # フレームを表示（オプション）
             cv2.imshow("Video Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
             if cv2.waitKey(1) == ord('q'):
                 break
 
-            inputs.append(pil2tensor(img_cropped))
+            inputs.append(pil2tensor(img_resized))
 
             interval = time.time() - start_time
             fps_interval = 1.0 / UPEER_FPS
@@ -801,6 +804,7 @@ def read_video(
         cap.release()
         cv2.destroyWindow("Video Input")
         print('exit : read_video')
+
 
 
 def dummy_screen(
