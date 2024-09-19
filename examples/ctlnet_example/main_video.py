@@ -68,6 +68,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         self.ctl_image_t_buffer = None
         self.added_cond_kwargs = None
         self.acceleration = acceleration
+        self.engine_dir = engine_dir
 
     @torch.no_grad()
     def prepare(
@@ -255,7 +256,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                     else:
                         return f"{model_id_or_path}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}"
 
-                engine_dir = Path(engine_dir)
+                engine_dir = Path(self.engine_dir)
                 unet_path = os.path.join(
                     engine_dir,
                     create_prefix(
