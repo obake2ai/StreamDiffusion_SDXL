@@ -228,7 +228,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         ### TODO: 高速化
         try:
             if self.acceleration == "xformers":
-                stream.pipe.enable_xformers_memory_efficient_attention()
+                self.pipe.enable_xformers_memory_efficient_attention()
             if self.acceleration == "tensorrt":
                 from polygraphy import cuda
                 from streamdiffusion.acceleration.tensorrt import (
