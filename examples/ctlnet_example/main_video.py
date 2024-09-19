@@ -610,7 +610,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         num_images_per_prompt = 1
         batch_size = 1
         guess_mode = False
-        if self.pipe.controlnet != None:
+        if self.pipe.controlnet is not None:
             timage = self.pipe.prepare_image(
                 image=ctlnet_image,
                 width=self.width,
@@ -625,7 +625,8 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         ctlnet_image = timage
 
-        total_steps = self.num_inference_steps
+        # 追加: 初期ステップの割合に基づいてターゲットイメージを適用
+        total_steps = self.num_inference_steps  # 修正: num_inference_steps を使用
         initial_steps = int(self.initial_steps_ratio * total_steps)
 
         for step_idx in range(total_steps):
@@ -636,10 +637,13 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 # それ以降のステップでは通常の処理
                 blended_image = self.added_cond_kwargs['image_embeds'] if self.ip_adapter else ctlnet_image
 
+                # 参考画像が指定されている場合は適切にバッチ処理
+                if self.ip_adapter:
+                    # 4次元テンソルに変更し、ctlnet_image のバッチ数と一致させる
+                    blended_image = blended_image.unsqueeze(0).repeat(batch_size, 1, 1, 1)
+
             x_0_pred_out = self.predict_x0_batch(self.input_latent, blended_image)
 
-
-        tstart = time.time()
         x_output = self.decode_image(x_0_pred_out).detach().clone()
 
         tstart = time.time()
