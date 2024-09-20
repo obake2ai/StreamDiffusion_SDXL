@@ -936,7 +936,7 @@ def image_generation_process(
     adapter = True
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list = [0, 10, 35]
+    t_index_list = [0, 17, 35]
     cfg_type = "none"
     delta = 1.0
 
@@ -974,7 +974,7 @@ def image_generation_process(
         pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models",
                              weight_name="ip-adapter_sd15.bin",
                              torch_dtype=torch.float16)
-        pipe.set_ip_adapter_scale(0.7)
+        pipe.set_ip_adapter_scale(0.8)
 
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
@@ -992,10 +992,10 @@ def image_generation_process(
     # LoRAの読み込み
     pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")
     pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
-    pipe.load_lora_weights("./models/LoRA/xshingogirl.safetensors", adapter_name="xshingogirl")
-    pipe.set_adapters(["xshingogirl"], adapter_weights=[1.0])
-    pipe.load_lora_weights("./models/LoRA/xshingositu.safetensors", adapter_name="xshingositu")
-    pipe.set_adapters(["xshingositu"], adapter_weights=[1.0])
+    # pipe.load_lora_weights("./models/LoRA/xshingogirl.safetensors", adapter_name="xshingogirl")
+    # pipe.set_adapters(["xshingogirl"], adapter_weights=[1.0])
+    # pipe.load_lora_weights("./models/LoRA/xshingositu.safetensors", adapter_name="xshingositu")
+    # pipe.set_adapters(["xshingositu"], adapter_weights=[1.0])
     # pipe.load_lora_weights("latent-consistency/lcm-lora-sdv1-5", adapter_name="lcm") #Stable  Diffusion 1.5 のLCM LoRA
     # pipe.set_adapters(["lcm"], adapter_weights=[1.0])
 
