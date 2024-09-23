@@ -30,6 +30,8 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 
+from stream_info import *
+
 ###############################################
 # プロンプトはここ
 ###############################################
@@ -641,14 +643,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         inference_time = start.elapsed_time(end) / 1000
         self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
         return x_output
-
-
-UPEER_FPS = 100
-fps_interval = 1.0 / UPEER_FPS
-inputs = []
-top = 0
-left = 0
-
 
 def screen(
     event: threading.Event(),
