@@ -1005,7 +1005,7 @@ def main(
     frame_buffer_size: int = 1,
     width: int = 512,
     height: int = 512,
-    acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+    acceleration: Literal["none", "xformers", "tensorrt"] = "none",
     use_denoising_batch: bool = True,
     seed: int = 2,
     cfg_type: Literal["none", "full", "self", "initialize"] = "none",
