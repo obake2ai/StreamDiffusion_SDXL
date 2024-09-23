@@ -38,12 +38,6 @@ from stream_info import *
 box_prompt = "xshingoboy"
 ###############################################
 
-UPEER_FPS = 100
-fps_interval = 1.0/UPEER_FPS
-inputs = []
-top = 0
-left = 0
-
 
 class StreamDiffusionControlNetSample(StreamDiffusion):
     def __init__(self,
