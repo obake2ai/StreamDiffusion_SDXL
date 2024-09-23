@@ -923,14 +923,14 @@ def image_generation_process(
 
     global inputs
     global box_prompt
-    instep = 40
+    instep = INSTEP
     ######################################################
     # パラメタ
     ######################################################
     adapter = True
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list = [0, 17, 35]
+    t_index_list = T_INDEXT_LIST
     cfg_type = "none"
     delta = 1.0
 
@@ -1098,8 +1098,8 @@ def main(
     prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
-    width: int = 960,
-    height: int = 540,
+    width: int = SD_WIDTH,
+    height: int = SD_HEIGHT,
     acceleration: Literal["none", "xformers", "tensorrt"] = "none",
     use_denoising_batch: bool = True,
     seed: int = 2,

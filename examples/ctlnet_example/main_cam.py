@@ -661,14 +661,14 @@ def image_generation_process(
 
     global inputs
     global box_prompt
-    instep = 40
+    instep = INSTEP
     ######################################################
     # パラメタ
     ######################################################
     adapter = True
     ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
-    t_index_list = [0, 10, 35]
+    t_index_list = T_INDEXT_LIST
     cfg_type = "none"
     delta = 1.0
 
