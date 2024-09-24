@@ -1179,8 +1179,8 @@ def main(
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
     video_file_path: Optional[str] = VIDEO_PATH,
-    save_video: bool = True,  # Add save_video argument
-    t_index_list: List[int] = T_INDEXT_LIST,  # T_INDEXT_LIST is passed here
+    save_video: bool = True,
+    t_index_list: List[int] = T_INDEXT_LIST,
 ) -> None:
     """
     メイン関数
@@ -1192,14 +1192,13 @@ def main(
     prompt_queue = ctx.Queue()
     close_queue = Queue()
 
-    do_add_noise = False
     monitor_sender, monitor_receiver = ctx.Pipe()
+
+    event = threading.Event()
 
     prompt_process = ctx.Process(
         target=prompt_window,
-        args=(
-            prompt_queue,
-        ),
+        args=(prompt_queue,),
     )
     prompt_process.start()
 
@@ -1229,9 +1228,10 @@ def main(
             monitor_receiver,
             engine_dir,
             prompt_queue,
-            video_file_path,  # 追加
-            save_video,  # Pass save_video argument
-            t_index_list,  # Pass T_INDEXT_LIST
+            video_file_path,
+            save_video,
+            t_index_list,
+            event  # イベントを渡す
         ),
     )
     process1.start()
@@ -1250,18 +1250,29 @@ def main(
     process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
     process2.start()
 
-    # terminate
-    process2.join()
-    print("process2 terminated.")
-    close_queue.put(True)
+    # メインループを修正して、`event.is_set()` が呼ばれたら終了するようにする
+    while True:
+        if event.is_set():  # 終了条件のチェック
+            break
+        time.sleep(0.5)  # 一定時間ごとにチェック
+
     print("process1 terminating...")
+    close_queue.put(True)
     process1.join(5)  # with timeout
     if process1.is_alive():
         print("process1 still alive. force killing...")
-        process1.terminate()  # force kill...
+        process1.terminate()  # force kill
     process1.join()
-    print("process1 terminated.")
 
+    print("process2 terminating...")
+    process2.join()
+    print("process2 terminated.")
+
+    print("Prompt process terminating...")
+    prompt_process.terminate()
+    prompt_process.join()
+
+    print("All processes terminated.")
 
 if __name__ == "__main__":
     fire.Fire(main)
