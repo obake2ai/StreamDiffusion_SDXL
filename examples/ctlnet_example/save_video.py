@@ -19,6 +19,8 @@ from streamdiffusion.image_utils import postprocess_image
 from my_image_utils import pil2tensor
 from main_video import StreamDiffusionControlNetSample
 
+from stream_info import *
+
 # Global variables
 inputs = []
 
