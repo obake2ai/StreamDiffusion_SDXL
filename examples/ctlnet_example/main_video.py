@@ -1075,51 +1075,77 @@ def image_generation_process(
     current_prompt = box_prompt
     while True:
         try:
+            # 閉じるためのフラグが立っているか確認
             if not close_queue.empty():  # closing check
                 break
+
+            # 動画の保存が有効で、ビデオ入力がループしていない場合は処理を終了
+            if save_video and video_file_path is not None:
+                ret, frame = video_capture.read()
+                if not ret:
+                    print("End of video file reached. Stopping process.")
+                    break
+
+                # フレームをPILの画像に変換して、入力処理に渡す
+                input_image = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                inputs.append(pil2tensor(input_image))
+
+            # フレームバッファが不足している場合、待機
             if len(inputs) < frame_buffer_size:
                 time.sleep(fps_interval)
                 continue
+
             start_time = time.time()
             sampled_inputs = []
+            # フレームバッファから入力を取得
             for i in range(frame_buffer_size):
                 index = (len(inputs) // frame_buffer_size) * i
                 sampled_inputs.append(inputs[len(inputs) - index - 1])
             input_batch = torch.cat(sampled_inputs)
             inputs.clear()
+
             new_prompt = current_prompt
-            if not prompt_queue.empty():
+            if not prompt_queue.empty():  # プロンプトの更新チェック
                 new_prompt = prompt_queue.get(block=False)
 
             prompt_change = False
-            if current_prompt != new_prompt:
+            if current_prompt != new_prompt:  # プロンプトが変更された場合
                 current_prompt = new_prompt
                 stream.update_prompt(current_prompt, negative_prompt)
                 prompt_change = True
 
+            # 画像生成のために入力をデバイスに送信
             input = input_batch.to(device=stream.device, dtype=stream.dtype)
+
             global base_img
             if base_img is None:
                 base_img = input
 
+            # 生成された画像を取得
             output_images = stream.ctlimg2img(ctlnet_image=input, keep_latent=keep_latent)
 
             if frame_buffer_size == 1:
                 output_images = [output_images]
+
+            # キューに生成された画像を保存
             for output_image in output_images:
                 queue.put(output_image, block=False)
+
+            # 処理時間に基づいてFPSを計算し、待機時間を調整
             process_time = time.time() - start_time
             if process_time <= fps_interval:
                 time.sleep(fps_interval - process_time)
+
             process_time = time.time() - start_time
             fps = 1 / (process_time)
             fps_queue.put(fps)
+
+            # 動画の保存が有効な場合、生成された画像をビデオに書き込む
             if save_video and video_writer is not None:
                 for output_image in output_images:
                     # Convert output_image (PIL) to a format OpenCV can handle
                     opencv_image = np.array(output_image.cpu().float())  # Convert to float32
                     opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_RGB2BGR)
-                    video_writer.write(opencv_image)
                     video_writer.write(opencv_image)
 
         except KeyboardInterrupt:
@@ -1133,7 +1159,8 @@ def image_generation_process(
     # Release video writer when done
     if video_writer is not None:
         video_writer.release()
-
+    if video_file_path is not None:
+        video_capture.release()
 
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
