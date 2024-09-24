@@ -764,7 +764,7 @@ def read_video(
     height: int = 512,
     width: int = 512,
     monitor_info: Dict[str, Any] = None,
-    resize_mode: bool = True,  # New parameter to control resizing
+    resize_mode: bool = True,
 ):
     global inputs
 
@@ -776,11 +776,9 @@ def read_video(
     # ビデオウィンドウを設定
     cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
     if monitor_info:
-        # ウィンドウを別モニターに移動
         monitor_x = monitor_info['left']
         monitor_y = monitor_info['top']
         cv2.moveWindow("Video Input", monitor_x, monitor_y)
-        # ウィンドウサイズをモニターサイズに合わせる
         cv2.resizeWindow("Video Input", width, height)
 
     try:
@@ -793,18 +791,16 @@ def read_video(
 
             ret, frame = cap.read()
             if not ret:
-                print("End of video file reached. Restarting video.")
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
-                continue
+                print("End of video file reached.")
+                event.set()  # 終了のフラグをセットして終了
+                break
 
             # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
             if resize_mode:
-                # リサイズモードがTrueの場合、画像を指定サイズにリサイズ
                 img_resized = img.resize((width, height))
             else:
-                # 画像を中央からクロップ
                 img_width, img_height = img.size
                 left_crop = (img_width - width) // 2
                 top_crop = (img_height - height) // 2
@@ -816,6 +812,7 @@ def read_video(
             # フレームを表示（オプション）
             cv2.imshow("Video Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
             if cv2.waitKey(1) == ord('q'):
+                event.set()  # 終了のフラグをセットして終了
                 break
 
             inputs.append(pil2tensor(img_resized))
