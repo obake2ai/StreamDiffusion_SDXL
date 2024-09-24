@@ -1145,13 +1145,20 @@ def image_generation_process(
                     pil_image.save(output_image_path)
                     frame_count += 1
 
+
+            print("closing image_generation_process...")
+            event.set()  # stop capture thread
+            input_thread.join()
+
+            # ここで正常に終了する場合
+            print("Process ended successfully.")
         except KeyboardInterrupt:
             break
-
-    print("closing image_generation_process...")
-    event.set()  # stop capture thread
-    input_thread.join()
-    print(f"fps: {fps}")
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            print("Forcefully exiting the process.")
+            os._exit(0)  # プロセスを強制的に終了
 
     # Release video writer when done
     if video_writer is not None:
@@ -1261,6 +1268,7 @@ def main(
         process1.terminate()  # force kill...
     process1.join()
     print("process1 terminated.")
+    os._exit(0)  # プロセス全体を強制的に終了
 
 
 if __name__ == "__main__":
