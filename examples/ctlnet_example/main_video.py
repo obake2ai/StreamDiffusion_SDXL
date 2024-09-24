@@ -776,11 +776,9 @@ def read_video(
     # ビデオウィンドウを設定
     cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
     if monitor_info:
-        # ウィンドウを別モニターに移動
         monitor_x = monitor_info['left']
         monitor_y = monitor_info['top']
         cv2.moveWindow("Video Input", monitor_x, monitor_y)
-        # ウィンドウサイズをモニターサイズに合わせる
         cv2.resizeWindow("Video Input", width, height)
 
     try:
@@ -789,22 +787,16 @@ def read_video(
                 print("terminate video thread")
                 break
 
-            start_time = time.time()
-
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached. Restarting video.")
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 continue
 
-            # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
             if resize_mode:
-                # リサイズモードがTrueの場合、画像を指定サイズにリサイズ
                 img_resized = img.resize((width, height))
             else:
-                # 画像を中央からクロップ
                 img_width, img_height = img.size
                 left_crop = (img_width - width) // 2
                 top_crop = (img_height - height) // 2
@@ -813,23 +805,13 @@ def read_video(
                 img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
                 img_resized = img_cropped
 
-            # フレームを表示（オプション）
-            cv2.imshow("Video Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
-            if cv2.waitKey(1) == ord('q'):
-                break
-
+            # inputs リストにフレームを追加
             inputs.append(pil2tensor(img_resized))
 
-            interval = time.time() - start_time
-            fps_interval = 1.0 / UPEER_FPS
-            if interval < fps_interval:
-                sleep_time = fps_interval - interval
-                time.sleep(sleep_time)
     finally:
         cap.release()
         cv2.destroyWindow("Video Input")
         print('exit : read_video')
-
 
 def dummy_screen(
         width: int,
@@ -959,7 +941,7 @@ def image_generation_process(
 
         output_folder = f"{os.path.splitext(input_filename)[0]}_{timestamp}_TList_{t_index_str}"
         output_folder_path = os.path.join(input_dir, output_folder)
-
+        print(f"Saving PNG files to folder: {output_folder_path}")
         # フォルダが存在しない場合は作成
         os.makedirs(output_folder_path, exist_ok=True)
     global inputs
@@ -1139,6 +1121,7 @@ def image_generation_process(
 
             # 動画の保存が有効な場合、フレームごとに PNG ファイルとして保存
             if save_video:
+                print(f"Generated {len(output_images)} images, saving frames...")
                 for output_image in output_images:
                     # TensorをPILに変換
                     pil_image = tensor_to_pil(output_image)
