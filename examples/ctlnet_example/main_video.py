@@ -1167,18 +1167,41 @@ def image_generation_process(
         video_capture.release()
 
 
+
 def close_all_windows():
-    """Tkinterとcv2ウィンドウを閉じる処理"""
+    """全てのウィンドウを確実に閉じる"""
+    print ("Closing All Windows...")
     try:
-        # cv2 ウィンドウを閉じる
-        cv2.destroyAllWindows()
+        # cv2 ウィンドウを閉じる（複数回呼び出して確実に閉じる）
+        for _ in range(3):
+            cv2.destroyAllWindows()
+            cv2.waitKey(1)
 
         # Tkinter ウィンドウを閉じる
+        if tk._default_root:
+            tk._default_root.quit()  # quit Tkinter main loop
+            tk._default_root.destroy()  # destroy all Tkinter windows
+
+        # Tkinter ウィンドウが開いているか確認して強制終了
         for window in tk._default_root.children.values():
-            window.destroy()
+            try:
+                window.quit()
+                window.destroy()
+            except Exception as e:
+                print(f"Error destroying window: {e}")
+
+        # プロセスを強制終了する（psutilを使用）
+        current_process = psutil.Process(os.getpid())
+        for child in current_process.children(recursive=True):
+            print(f"Terminating child process: {child.pid}")
+            child.terminate()  # 正常な終了を試みる
+            child.wait(timeout=3)  # 3秒待機
+            if child.is_running():
+                print(f"Killing child process: {child.pid}")
+                child.kill()  # 強制終了
 
     except Exception as e:
-        print(f"Error closing windows: {e}")
+        print(f"Error closing windows or processes: {e}")
 
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
