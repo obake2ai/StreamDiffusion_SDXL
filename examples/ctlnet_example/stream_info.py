@@ -19,3 +19,4 @@ LORA_PATH = "./models/LoRA/xshingoboy.safetensors"
 LORA_NAME = "xshingoboy"
 
 PROMPT="masterpiece, xshingoboy"
+MODEL_PATH = "Lykon/dreamshaper-8-lcm"
