@@ -925,32 +925,30 @@ def image_generation_process(
     video_fps = None
 
     if save_video and video_file_path:
-        # Capture video properties
+        prinit ("video save mode")
         video_capture = cv2.VideoCapture(video_file_path)
         if video_capture.isOpened():
             video_fps = video_capture.get(cv2.CAP_PROP_FPS)
 
-            # Extract input file directory and filename
             input_dir = os.path.dirname(video_file_path)
             input_filename = os.path.basename(video_file_path)
-
-            # Create a timestamp to append to the filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            # Convert T_INDEXT_LIST to a string and clean up for filenames (replace spaces, commas)
             if t_index_list:
                 t_index_str = "_".join(map(str, t_index_list))
             else:
                 t_index_str = "no_index_list"
 
-            # Generate the output filename with the timestamp and T_INDEXT_LIST
             output_filename = f"{os.path.splitext(input_filename)[0]}_{timestamp}_TList_{t_index_str}.mov"
             output_video_path = os.path.join(input_dir, output_filename)
 
-            # Create VideoWriter with lossless MOV format
-            fourcc = cv2.VideoWriter_fourcc(*'avc1')  # Lossless codec
+            # 動画書き出し用の VideoWriter を設定
+            fourcc = cv2.VideoWriter_fourcc(*'avc1')  # コーデック設定
             video_writer = cv2.VideoWriter(output_video_path, fourcc, video_fps, (width, height))
 
+            # エラー時に video_writer の初期化が失敗していないか確認
+            if not video_writer.isOpened():
+                raise ValueError(f"Failed to open video writer for path: {output_video_path}")
 
     global inputs
     global box_prompt
