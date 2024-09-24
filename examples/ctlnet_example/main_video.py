@@ -1202,7 +1202,6 @@ def main(
             monitor_receiver,
             engine_dir,
             prompt_queue,
-            video_file_path  # 追加
             video_file_path,  # 追加
             save_video,  # Pass save_video argument
             t_index_list,  # Pass T_INDEXT_LIST
