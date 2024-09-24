@@ -40,6 +40,14 @@ box_prompt = "xshingoboy"
 ###############################################
 
 
+def tensor_to_pil(tensor: torch.Tensor) -> Image.Image:
+    """Convert a Tensor to a PIL Image."""
+    tensor = tensor.detach().cpu().float().numpy()
+    tensor = np.moveaxis(tensor, 0, -1)
+    tensor = np.clip(tensor * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(tensor)
+
+
 class StreamDiffusionControlNetSample(StreamDiffusion):
     def __init__(self,
                  pipe: StableDiffusionPipeline,
@@ -1121,9 +1129,12 @@ def image_generation_process(
             # 動画の保存が有効な場合、フレームごとに PNG ファイルとして保存
             if save_video:
                 for output_image in output_images:
-                    # フレームを PNG ファイルとして保存
+                    # TensorをPILに変換
+                    pil_image = tensor_to_pil(output_image)
+
+                    # PNG画像を保存
                     output_image_path = os.path.join(output_folder_path, f"frame_{frame_count:05d}.png")
-                    output_image.save(output_image_path)
+                    pil_image.save(output_image_path)
                     frame_count += 1
 
         except KeyboardInterrupt:
