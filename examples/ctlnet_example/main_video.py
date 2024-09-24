@@ -1212,7 +1212,7 @@ def main(
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
     video_file_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",
-    save_video: bool = True,
+    save_video: bool = False,
     t_index_list: List[int] = T_INDEXT_LIST,
 ) -> None:
     """
