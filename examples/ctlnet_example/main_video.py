@@ -30,6 +30,7 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 from datetime import datetime
+from multiprocessing import Event
 
 from stream_info import *
 
@@ -1190,11 +1191,11 @@ def main(
     queue = ctx.Queue()
     fps_queue = ctx.Queue()
     prompt_queue = ctx.Queue()
-    close_queue = Queue()
+    close_queue = ctx.Queue()
+
+    event = ctx.Event()  # threading.Event()から置き換え
 
     monitor_sender, monitor_receiver = ctx.Pipe()
-
-    event = threading.Event()
 
     prompt_process = ctx.Process(
         target=prompt_window,
