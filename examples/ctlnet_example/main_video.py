@@ -1117,7 +1117,7 @@ def image_generation_process(
             if save_video and video_writer is not None:
                 for output_image in output_images:
                     # Convert output_image (PIL) to a format OpenCV can handle
-                    opencv_image = cv2.cvtColor(np.array(output_image), cv2.COLOR_RGB2BGR)
+                    opencv_image = cv2.cvtColor(np.array(output_image.cpu()), cv2.COLOR_RGB2BGR)
                     video_writer.write(opencv_image)
 
         except KeyboardInterrupt:
