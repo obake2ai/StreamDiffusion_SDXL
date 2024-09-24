@@ -4,6 +4,7 @@ T_INDEXT_LIST = [10, 35, 40]
 IMAGE_MARPBE_RATE = 0.6
 
 IP_ADAPTER_IMAGE = "assets/xshingoboy-0043.jpg"
+VIDEO_PATH = "./assets/0710_MPtestsozai.mp4"
 
 SD_WIDTH = 960
 SD_HEIGHT = 540
@@ -16,3 +17,5 @@ left = 0
 
 LORA_PATH = "./models/LoRA/xshingoboy.safetensors"
 LORA_NAME = "xshingoboy"
+
+PROMPT="masterpiece, xshingoboy"

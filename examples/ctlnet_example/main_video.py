@@ -1165,7 +1165,7 @@ def image_generation_process(
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
     lora_dict: Optional[Dict[str, float]] = {LORA_PATH: 1.0},
-    prompt: str = "xshingoboy",
+    prompt: str = PROMPT,
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
     width: int = SD_WIDTH,
@@ -1181,7 +1181,7 @@ def main(
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
-    video_file_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",
+    video_file_path: Optional[str] = VIDEO_PATH,
     save_video: bool = True,  # Add save_video argument
     t_index_list: List[int] = T_INDEXT_LIST,  # T_INDEXT_LIST is passed here
 ) -> None:
