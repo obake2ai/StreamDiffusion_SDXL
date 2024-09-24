@@ -30,6 +30,8 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 from datetime import datetime
+import psutil
+import signal
 
 from stream_info import *
 
@@ -39,6 +41,42 @@ from stream_info import *
 box_prompt = "xshingoboy"
 ###############################################
 
+
+def close_all_windows():
+    """全てのウィンドウを確実に閉じる"""
+    print ("Closing All Windows...")
+    try:
+        # cv2 ウィンドウを閉じる（複数回呼び出して確実に閉じる）
+        for _ in range(3):
+            cv2.destroyAllWindows()
+            cv2.waitKey(1)
+
+        # Tkinter ウィンドウが存在するか確認し、存在する場合のみ処理を実行
+        if tk._default_root is not None:
+            print("Closing Tkinter windows")
+            tk._default_root.quit()  # quit Tkinter main loop
+            tk._default_root.destroy()  # destroy all Tkinter windows
+
+            # Tkinter のウィンドウを個別に閉じる
+            for window in tk._default_root.children.values():
+                try:
+                    window.quit()
+                    window.destroy()
+                except Exception as e:
+                    print(f"Error destroying window: {e}")
+
+        # プロセスを強制終了する（psutilを使用）
+        current_process = psutil.Process(os.getpid())
+        for child in current_process.children(recursive=True):
+            print(f"Terminating child process: {child.pid}")
+            child.terminate()  # 正常な終了を試みる
+            child.wait(timeout=3)  # 3秒待機
+            if child.is_running():
+                print(f"Killing child process: {child.pid}")
+                child.kill()  # 強制終了
+
+    except Exception as e:
+        print(f"Error closing windows or processes: {e}")
 
 def tensor_to_pil(tensor: torch.Tensor) -> Image.Image:
     """Convert a Tensor to a PIL Image."""
@@ -852,42 +890,6 @@ def dummy_screen(
     root.bind("<Configure>", update_geometry)
     root.mainloop()
     return {"top": top, "left": left, "width": width, "height": height}
-
-
-def close_all_windows():
-    """全てのウィンドウを確実に閉じる"""
-    print ("Closing All Windows...")
-    try:
-        # cv2 ウィンドウを閉じる（複数回呼び出して確実に閉じる）
-        for _ in range(3):
-            cv2.destroyAllWindows()
-            cv2.waitKey(1)
-
-        # Tkinter ウィンドウを閉じる
-        if tk._default_root:
-            tk._default_root.quit()  # quit Tkinter main loop
-            tk._default_root.destroy()  # destroy all Tkinter windows
-
-        # Tkinter ウィンドウが開いているか確認して強制終了
-        for window in tk._default_root.children.values():
-            try:
-                window.quit()
-                window.destroy()
-            except Exception as e:
-                print(f"Error destroying window: {e}")
-
-        # プロセスを強制終了する（psutilを使用）
-        current_process = psutil.Process(os.getpid())
-        for child in current_process.children(recursive=True):
-            print(f"Terminating child process: {child.pid}")
-            child.terminate()  # 正常な終了を試みる
-            child.wait(timeout=3)  # 3秒待機
-            if child.is_running():
-                print(f"Killing child process: {child.pid}")
-                child.kill()  # 強制終了
-
-    except Exception as e:
-        print(f"Error closing windows or processes: {e}")
 
 
 def prompt_window(queue):
