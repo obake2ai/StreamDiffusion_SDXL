@@ -1169,7 +1169,7 @@ def image_generation_process(
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
     lora_dict: Optional[Dict[str, float]] = {LORA_PATH: 1.0},
-    prompt: str = PROMPT,
+    prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
     width: int = SD_WIDTH,
@@ -1185,28 +1185,24 @@ def main(
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
-    video_file_path: Optional[str] = VIDEO_PATH,
-    save_video: bool = True,  # Add save_video argument
-    t_index_list: List[int] = T_INDEXT_LIST,  # T_INDEXT_LIST is passed here
+    video_file_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",
+    save_video: bool = True,
+    t_index_list: List[int] = T_INDEXT_LIST,
 ) -> None:
     """
     メイン関数
     """
-
     ctx = get_context('spawn')
     queue = ctx.Queue()
     fps_queue = ctx.Queue()
     prompt_queue = ctx.Queue()
     close_queue = Queue()
 
-    do_add_noise = False
     monitor_sender, monitor_receiver = ctx.Pipe()
 
     prompt_process = ctx.Process(
         target=prompt_window,
-        args=(
-            prompt_queue,
-        ),
+        args=(prompt_queue,),
     )
     prompt_process.start()
 
@@ -1236,9 +1232,9 @@ def main(
             monitor_receiver,
             engine_dir,
             prompt_queue,
-            video_file_path,  # 追加
-            save_video,  # Pass save_video argument
-            t_index_list,  # Pass T_INDEXT_LIST
+            video_file_path,
+            save_video,
+            t_index_list,
         ),
     )
     process1.start()
@@ -1261,14 +1257,26 @@ def main(
     process2.join()
     print("process2 terminated.")
     close_queue.put(True)
+
     print("process1 terminating...")
-    process1.join(5)  # with timeout
+    process1.join(5)  # wait for process1 to finish
+
     if process1.is_alive():
         print("process1 still alive. force killing...")
         process1.terminate()  # force kill...
-    process1.join()
+        process1.join()
+
     print("process1 terminated.")
-    os._exit(0)  # プロセス全体を強制的に終了
+
+    # Prompt process cleanup
+    print("prompt_process terminating...")
+    prompt_process.terminate()
+    prompt_process.join()
+
+    print("prompt_process terminated.")
+
+    # Exit program forcefully to ensure all windows are closed
+    os._exit(0)  # Ensure all processes are terminated forcefully
 
 
 if __name__ == "__main__":
