@@ -30,7 +30,6 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 from datetime import datetime
-from multiprocessing import Event
 
 from stream_info import *
 
@@ -793,8 +792,7 @@ def read_video(
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached.")
-                event.set()  # 終了のフラグをセットして終了
-                break
+                os._exit(0)
 
             # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -1180,8 +1178,8 @@ def main(
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
     video_file_path: Optional[str] = VIDEO_PATH,
-    save_video: bool = True,
-    t_index_list: List[int] = T_INDEXT_LIST,
+    save_video: bool = True,  # Add save_video argument
+    t_index_list: List[int] = T_INDEXT_LIST,  # T_INDEXT_LIST is passed here
 ) -> None:
     """
     メイン関数
@@ -1191,15 +1189,16 @@ def main(
     queue = ctx.Queue()
     fps_queue = ctx.Queue()
     prompt_queue = ctx.Queue()
-    close_queue = ctx.Queue()
+    close_queue = Queue()
 
-    event = ctx.Event()  # threading.Event()から置き換え
-
+    do_add_noise = False
     monitor_sender, monitor_receiver = ctx.Pipe()
 
     prompt_process = ctx.Process(
         target=prompt_window,
-        args=(prompt_queue,),
+        args=(
+            prompt_queue,
+        ),
     )
     prompt_process.start()
 
@@ -1229,10 +1228,9 @@ def main(
             monitor_receiver,
             engine_dir,
             prompt_queue,
-            video_file_path,
-            save_video,
-            t_index_list,
-            event  # イベントを渡す
+            video_file_path,  # 追加
+            save_video,  # Pass save_video argument
+            t_index_list,  # Pass T_INDEXT_LIST
         ),
     )
     process1.start()
@@ -1251,29 +1249,18 @@ def main(
     process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
     process2.start()
 
-    # メインループを修正して、`event.is_set()` が呼ばれたら終了するようにする
-    while True:
-        if event.is_set():  # 終了条件のチェック
-            break
-        time.sleep(0.5)  # 一定時間ごとにチェック
-
-    print("process1 terminating...")
+    # terminate
+    process2.join()
+    print("process2 terminated.")
     close_queue.put(True)
+    print("process1 terminating...")
     process1.join(5)  # with timeout
     if process1.is_alive():
         print("process1 still alive. force killing...")
-        process1.terminate()  # force kill
+        process1.terminate()  # force kill...
     process1.join()
+    print("process1 terminated.")
 
-    print("process2 terminating...")
-    process2.join()
-    print("process2 terminated.")
-
-    print("Prompt process terminating...")
-    prompt_process.terminate()
-    prompt_process.join()
-
-    print("All processes terminated.")
 
 if __name__ == "__main__":
     fire.Fire(main)
