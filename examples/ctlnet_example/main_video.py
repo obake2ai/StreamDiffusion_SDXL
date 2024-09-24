@@ -925,31 +925,23 @@ def image_generation_process(
     video_fps = None
 
     if save_video and video_file_path:
-        print ("video save mode")
-        video_capture = cv2.VideoCapture(video_file_path)
-        if video_capture.isOpened():
-            video_fps = video_capture.get(cv2.CAP_PROP_FPS)
+        print("PNG保存モード")
 
-            input_dir = os.path.dirname(video_file_path)
-            input_filename = os.path.basename(video_file_path)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 現在の日時を使ったフォルダ名の生成
+        input_dir = os.path.dirname(video_file_path)
+        input_filename = os.path.basename(video_file_path)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            if t_index_list:
-                t_index_str = "_".join(map(str, t_index_list))
-            else:
-                t_index_str = "no_index_list"
+        if t_index_list:
+            t_index_str = "_".join(map(str, t_index_list))
+        else:
+            t_index_str = "no_index_list"
 
-            output_filename = f"{os.path.splitext(input_filename)[0]}_{timestamp}_TList_{t_index_str}.mov"
-            output_video_path = os.path.join(input_dir, output_filename)
+        output_folder = f"{os.path.splitext(input_filename)[0]}_{timestamp}_TList_{t_index_str}"
+        output_folder_path = os.path.join(input_dir, output_folder)
 
-            # 動画書き出し用の VideoWriter を設定
-            fourcc = cv2.VideoWriter_fourcc(*'MJPG')  # コーデック設定
-            video_writer = cv2.VideoWriter(output_video_path, fourcc, video_fps, (width, height))
-
-            # エラー時に video_writer の初期化が失敗していないか確認
-            if not video_writer.isOpened():
-                raise ValueError(f"Failed to open video writer for path: {output_video_path}")
-
+        # フォルダが存在しない場合は作成
+        os.makedirs(output_folder_path, exist_ok=True)
     global inputs
     global box_prompt
     instep = INSTEP
@@ -1077,25 +1069,13 @@ def image_generation_process(
             if not close_queue.empty():  # closing check
                 break
 
-            # 動画の保存が有効で、ビデオ入力がループしていない場合は処理を終了
-            if save_video and video_file_path is not None:
-                ret, frame = video_capture.read()
-                if not ret:
-                    print("End of video file reached. Stopping process.")
-                    break
-
-                # フレームをPILの画像に変換して、入力処理に渡す
-                input_image = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                inputs.append(pil2tensor(input_image))
-
-            # フレームバッファが不足している場合、待機
             if len(inputs) < frame_buffer_size:
                 time.sleep(fps_interval)
                 continue
 
             start_time = time.time()
             sampled_inputs = []
-            # フレームバッファから入力を取得
+
             for i in range(frame_buffer_size):
                 index = (len(inputs) // frame_buffer_size) * i
                 sampled_inputs.append(inputs[len(inputs) - index - 1])
@@ -1125,7 +1105,6 @@ def image_generation_process(
             if frame_buffer_size == 1:
                 output_images = [output_images]
 
-            # キューに生成された画像を保存
             for output_image in output_images:
                 queue.put(output_image, block=False)
 
@@ -1138,13 +1117,13 @@ def image_generation_process(
             fps = 1 / (process_time)
             fps_queue.put(fps)
 
-            # 動画の保存が有効な場合、生成された画像をビデオに書き込む
-            if save_video and video_writer is not None:
+            # 動画の保存が有効な場合、フレームごとに PNG ファイルとして保存
+            if save_video:
                 for output_image in output_images:
-                    # Convert output_image (PIL) to a format OpenCV can handle
-                    opencv_image = np.array(output_image.cpu().float())  # Convert to float32
-                    opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_RGB2BGR)
-                    video_writer.write(opencv_image)
+                    # フレームを PNG ファイルとして保存
+                    output_image_path = os.path.join(output_folder_path, f"frame_{frame_count:05d}.png")
+                    output_image.save(output_image_path)
+                    frame_count += 1
 
         except KeyboardInterrupt:
             break
