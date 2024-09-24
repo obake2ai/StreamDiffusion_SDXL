@@ -1166,6 +1166,20 @@ def image_generation_process(
     if video_file_path is not None:
         video_capture.release()
 
+
+def close_all_windows():
+    """Tkinterとcv2ウィンドウを閉じる処理"""
+    try:
+        # cv2 ウィンドウを閉じる
+        cv2.destroyAllWindows()
+
+        # Tkinter ウィンドウを閉じる
+        for window in tk._default_root.children.values():
+            window.destroy()
+
+    except Exception as e:
+        print(f"Error closing windows: {e}")
+
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
     lora_dict: Optional[Dict[str, float]] = {LORA_PATH: 1.0},
@@ -1275,9 +1289,11 @@ def main(
 
     print("prompt_process terminated.")
 
+    # Close all windows (cv2 and Tkinter)
+    close_all_windows()
+
     # Exit program forcefully to ensure all windows are closed
     os._exit(0)  # Ensure all processes are terminated forcefully
-
 
 if __name__ == "__main__":
     fire.Fire(main)
