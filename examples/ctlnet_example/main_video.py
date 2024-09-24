@@ -943,7 +943,7 @@ def image_generation_process(
             output_video_path = os.path.join(input_dir, output_filename)
 
             # 動画書き出し用の VideoWriter を設定
-            fourcc = cv2.VideoWriter_fourcc(*'H264')  # コーデック設定
+            fourcc = cv2.VideoWriter_fourcc(*'MJPG')  # コーデック設定
             video_writer = cv2.VideoWriter(output_video_path, fourcc, video_fps, (width, height))
 
             # エラー時に video_writer の初期化が失敗していないか確認
