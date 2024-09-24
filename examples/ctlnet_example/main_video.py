@@ -792,7 +792,7 @@ def read_video(
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached.")
-                os._exit(0)
+                break
 
             # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -825,6 +825,7 @@ def read_video(
         cap.release()
         cv2.destroyWindow("Video Input")
         print('exit : read_video')
+        os._exit(0)
 
 
 def dummy_screen(
