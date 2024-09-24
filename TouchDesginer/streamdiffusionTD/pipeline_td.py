@@ -1,140 +1,79 @@
-#pipeline_td cn 
+import os
+import sys
 import time
+import threading
 from typing import List, Optional, Union, Any, Dict, Tuple, Literal
-
 import numpy as np
-import PIL.Image
+from pathlib import Path
+from multiprocessing import Process, Queue, get_context
+from multiprocessing.connection import Connection
 import torch
-from diffusers import LCMScheduler, StableDiffusionPipeline, StableDiffusionXLPipeline, DiffusionPipeline
-from diffusers.image_processor import VaeImageProcessor
-from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import (
-    retrieve_latents,
-)
+import PIL.Image
+import mss
+import fire
+import tkinter as tk
+import cv2
+import traceback
+from datetime import datetime
+from screeninfo import get_monitors
 
-from streamdiffusion.image_filter import SimilarImageFilter
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-class StreamDiffusion:
-    def __init__(
-        self,
-        pipe: DiffusionPipeline,
-        t_index_list: List[int],
-        torch_dtype: torch.dtype = torch.float16,
-        width: int = 512,
-        height: int = 512,
-        do_add_noise: bool = True,
-        use_denoising_batch: bool = True,
-        frame_buffer_size: int = 1,
-        cfg_type: Literal["none", "full", "self", "initialize"] = "self",
-        use_controlnet: bool = False,
+from utils.viewer import receive_images
+from utils.wrapper import StreamDiffusionWrapper
 
-    ) -> None:
-        self.device = pipe.device
-        self.dtype = torch_dtype
-        self.generator = None
+from diffusers import AutoencoderTiny, StableDiffusionPipeline, ControlNetModel, StableDiffusionControlNetPipeline
+from diffusers.utils import load_image
 
-        self.height = height
-        self.width = width
+from streamdiffusion import StreamDiffusion
+from streamdiffusion.image_utils import postprocess_image
+from my_image_utils import pil2tensor
+from transformers import CLIPVisionModelWithProjection
+from PIL import Image
 
-        self.latent_height = int(height // pipe.vae_scale_factor)
-        self.latent_width = int(width // pipe.vae_scale_factor)
+from stream_info import *
 
-        self.frame_bff_size = frame_buffer_size
-        self.denoising_steps_num = len(t_index_list)
+###############################################
+# プロンプトはここ
+###############################################
+box_prompt = "xshingoboy"
+###############################################
 
-        self.cfg_type = cfg_type
 
-        if use_denoising_batch:
-            self.batch_size = self.denoising_steps_num * frame_buffer_size
-            if self.cfg_type == "initialize":
-                self.trt_unet_batch_size = (
-                    self.denoising_steps_num + 1
-                ) * self.frame_bff_size
-            elif self.cfg_type == "full":
-                self.trt_unet_batch_size = (
-                    2 * self.denoising_steps_num * self.frame_bff_size
-                )
-            else:
-                self.trt_unet_batch_size = self.denoising_steps_num * frame_buffer_size
-        else:
-            self.trt_unet_batch_size = self.frame_bff_size
-            self.batch_size = frame_buffer_size
-
-        self.t_list = t_index_list
-
-        self.do_add_noise = do_add_noise
-        self.use_denoising_batch = use_denoising_batch
-
-        self.similar_image_filter = False
-        self.similar_filter = SimilarImageFilter()
-        self.prev_image_result = None
-
-        self.pipe = pipe
-        self.image_processor = VaeImageProcessor(pipe.vae_scale_factor)
-
-        self.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
-        # print("scheduler")
-        # print(self.scheduler)
-        self.text_encoder = pipe.text_encoder
-        self.unet = pipe.unet
-        self.vae = pipe.vae
-        
-        self.inference_time_ema = 0
-
-        self.sdxl = type(self.pipe) is StableDiffusionXLPipeline
-
-        self.use_controlnet = use_controlnet
-        if self.use_controlnet:
+class StreamDiffusionControlNetSample(StreamDiffusion):
+    def __init__(self,
+                 pipe: StableDiffusionPipeline,
+                 t_index_list: List[int],
+                 torch_dtype: torch.dtype = torch.float16,
+                 width: int = 512,
+                 height: int = 512,
+                 do_add_noise: bool = True,
+                 use_denoising_batch: bool = True,
+                 frame_buffer_size: int = 1,
+                 cfg_type: Literal["none", "full", "self", "initialize"] = "self",
+                 acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+                 engine_dir: Optional[Union[str, Path]] = "engines",
+                 model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
+                 ip_adapter=None):
+        super().__init__(pipe,
+                         t_index_list,
+                         torch_dtype,
+                         width,
+                         height,
+                         do_add_noise,
+                         use_denoising_batch,
+                         frame_buffer_size,
+                         cfg_type,
+                         )
+        self.ip_adapter = ip_adapter
+        if pipe.controlnet != None:
             self.controlnet = pipe.controlnet
-        else:
-            self.controlnet = None
-        self.controlnet_conditioning_scale = 1.0
-        self.controlnet_start_step: int = 0
-        self.controlnet_end_step: int = 49
-
-
-    def load_lcm_lora(
-        self,
-        pretrained_model_name_or_path_or_dict: Union[
-            str, Dict[str, torch.Tensor]
-        ] = "latent-consistency/lcm-lora-sdv1-5",
-        adapter_name: Optional[Any] = None,
-        **kwargs,
-    ) -> None:
-        self.pipe.load_lora_weights(
-            pretrained_model_name_or_path_or_dict, adapter_name, **kwargs
-        )
-
-    def load_lora(
-        self,
-        pretrained_lora_model_name_or_path_or_dict: Union[str, Dict[str, torch.Tensor]],
-        adapter_name: Optional[Any] = None,
-        **kwargs,
-    ) -> None:
-        self.pipe.load_lora_weights(
-            pretrained_lora_model_name_or_path_or_dict, adapter_name, **kwargs
-        )
-
-    def fuse_lora(
-        self,
-        fuse_unet: bool = True,
-        fuse_text_encoder: bool = True,
-        lora_scale: float = 1.0,
-        safe_fusing: bool = False,
-    ) -> None:
-        self.pipe.fuse_lora(
-            fuse_unet=fuse_unet,
-            fuse_text_encoder=fuse_text_encoder,
-            lora_scale=lora_scale,
-            safe_fusing=safe_fusing,
-        )
-
-    def enable_similar_image_filter(self, threshold: float = 0.98, max_skip_frame: float = 10) -> None:
-        self.similar_image_filter = True
-        self.similar_filter.set_threshold(threshold)
-        self.similar_filter.set_max_skip_frame(max_skip_frame)
-
-    def disable_similar_image_filter(self) -> None:
-        self.similar_image_filter = False
+        self.input_latent = None
+        self.ctl_image_t_buffer = None
+        self.added_cond_kwargs = None
+        self.acceleration = acceleration
+        self.engine_dir = engine_dir
+        self.model_id_or_path = model_id_or_path
 
     @torch.no_grad()
     def prepare(
@@ -146,67 +85,44 @@ class StreamDiffusion:
         delta: float = 1.0,
         generator: Optional[torch.Generator] = torch.Generator(),
         seed: int = 2,
+        ip_adapter_image=None,
+        target_image_weight: float = IMAGE_MARPBE_RATE,
+        initial_steps_ratio: float = 0.3,
     ) -> None:
-        self.generator = generator
-        self.generator.manual_seed(seed)
-        # initialize x_t_latent (it can be any random tensor)
-        if self.denoising_steps_num > 1:
-            self.x_t_latent_buffer = torch.zeros(
-                (
-                    (self.denoising_steps_num - 1) * self.frame_bff_size,
-                    4,
-                    self.latent_height,
-                    self.latent_width,
-                ),
-                dtype=self.dtype,
-                device=self.device,
-            )
-            self.control_image_buffer = torch.zeros(
-                (
-                    (self.denoising_steps_num - 1) * self.frame_bff_size,
-                    3,
-                    self.height,
-                    self.width,
-                ),
-                dtype=self.dtype,
-                device=self.device,
-            )
-        else:
-            self.x_t_latent_buffer = None
-            self.control_image_buffer = None
-
+        self.do_classifier_free_guidance = False
         if self.cfg_type == "none":
             self.guidance_scale = 1.0
         else:
             self.guidance_scale = guidance_scale
         self.delta = delta
+        self.do_classifier_free_guidance = self.is_do_classifer_free_guicance()
+        self.target_image_weight = target_image_weight
+        self.initial_steps_ratio = initial_steps_ratio
 
-        do_classifier_free_guidance = False
-        if self.guidance_scale > 1.0:
-            do_classifier_free_guidance = True
+        # IPAdapterのため
+        if self.ip_adapter:
+            ip_adapter_image = ip_adapter_image.resize((self.height, self.width))
 
+            # SD IPADAPTERIMPL
+            num_images_per_prompt = 1
+
+            if ip_adapter_image is not None:
+                image_embeds, negative_image_embeds = self.pipe.encode_image(ip_adapter_image, "cuda", num_images_per_prompt)
+
+            print("image_embeded:{}".format(image_embeds.shape))
+
+        self.generator = generator
+        self.generator.manual_seed(seed)
+
+        # prepare for t_index_list and timesteps processing
         encoder_output = self.pipe.encode_prompt(
             prompt=prompt,
             device=self.device,
             num_images_per_prompt=1,
-            do_classifier_free_guidance=do_classifier_free_guidance,
+            do_classifier_free_guidance=self.do_classifier_free_guidance,
             negative_prompt=negative_prompt,
         )
         self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
-
-        if self.sdxl:
-            self.add_text_embeds = encoder_output[2]
-            original_size = (self.height, self.width)
-            crops_coords_top_left = (0, 0)
-            target_size = (self.height, self.width)
-            text_encoder_projection_dim = int(self.add_text_embeds.shape[-1])
-            self.add_time_ids = self._get_add_time_ids(
-                original_size,
-                crops_coords_top_left,
-                target_size,
-                dtype=encoder_output[0].dtype,
-                text_encoder_projection_dim=text_encoder_projection_dim,
-            )
 
         if self.use_denoising_batch and self.cfg_type == "full":
             uncond_prompt_embeds = encoder_output[1].repeat(self.batch_size, 1, 1)
@@ -219,6 +135,17 @@ class StreamDiffusion:
             self.prompt_embeds = torch.cat(
                 [uncond_prompt_embeds, self.prompt_embeds], dim=0
             )
+
+        if self.ip_adapter:
+            # IPADAPTER ORIGINAL IMPL
+            image_embeds = image_embeds.repeat(self.batch_size, 1, 1)
+            if self.do_classifier_free_guidance:
+                negative_image_embeds = negative_image_embeds.repeat(self.batch_size, 1, 1)
+
+                image_embeds = torch.cat([negative_image_embeds, image_embeds])
+
+            # SD IPADAPTER IMPL
+            self.added_cond_kwargs = {"image_embeds": image_embeds} if ip_adapter_image is not None else None
 
         self.scheduler.set_timesteps(num_inference_steps, self.device)
         self.timesteps = self.scheduler.timesteps.to(self.device)
@@ -252,7 +179,6 @@ class StreamDiffusion:
             )
             c_skip_list.append(c_skip)
             c_out_list.append(c_out)
-
         self.c_skip = (
             torch.stack(c_skip_list)
             .view(len(self.t_list), 1, 1, 1)
@@ -292,57 +218,12 @@ class StreamDiffusion:
             dim=0,
         )
 
-    @torch.no_grad()
-    def update_prompt(self, prompt: str) -> None:
-        encoder_output = self.pipe.encode_prompt(
-            prompt=prompt,
-            device=self.device,
-            num_images_per_prompt=1,
-            do_classifier_free_guidance=False,
-        )
-        self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
-
-    def add_noise(
-        self,
-        original_samples: torch.Tensor,
-        noise: torch.Tensor,
-        t_index: int,
-    ) -> torch.Tensor:
-        noisy_samples = (
-            self.alpha_prod_t_sqrt[t_index] * original_samples
-            + self.beta_prod_t_sqrt[t_index] * noise
-        )
-        return noisy_samples
-
-    def scheduler_step_batch(
-        self,
-        model_pred_batch: torch.Tensor,
-        x_t_latent_batch: torch.Tensor,
-        idx: Optional[int] = None,
-    ) -> torch.Tensor:
-        # TODO: use t_list to select beta_prod_t_sqrt
-        if idx is None:
-            F_theta = (
-                x_t_latent_batch - self.beta_prod_t_sqrt * model_pred_batch
-            ) / self.alpha_prod_t_sqrt
-            denoised_batch = self.c_out * F_theta + self.c_skip * x_t_latent_batch
-        else:
-            F_theta = (
-                x_t_latent_batch - self.beta_prod_t_sqrt[idx] * model_pred_batch
-            ) / self.alpha_prod_t_sqrt[idx]
-            denoised_batch = (
-                self.c_out[idx] * F_theta + self.c_skip[idx] * x_t_latent_batch
-            )
-
-        return denoised_batch
-
     def unet_step(
         self,
         x_t_latent: torch.Tensor,
         t_list: Union[torch.Tensor, list[int]],
-        added_cond_kwargs, 
-        idx: Optional[int] = None, 
-        control_image: Optional[torch.Tensor] = None,
+        idx: Optional[int] = None,
+        image=None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
             x_t_latent_plus_uc = torch.concat([x_t_latent[0:1], x_t_latent], dim=0)
@@ -353,46 +234,34 @@ class StreamDiffusion:
         else:
             x_t_latent_plus_uc = x_t_latent
 
+        latent_model_input = x_t_latent_plus_uc
+        controlnet_prompt_embeds = self.prompt_embeds
+        control_model_input = latent_model_input
+        down_block_res_samples, mid_block_res_sample = self.controlnet(
+            control_model_input,
+            t_list,
+            encoder_hidden_states=controlnet_prompt_embeds,
+            controlnet_cond=image,
+            conditioning_scale=1,
+            guess_mode=False,
+            return_dict=False,
+        )
 
-        if self.use_controlnet and self.controlnet is not None:
-            down_samples, mid_sample = self.controlnet(
-                x_t_latent_plus_uc,
-                t_list,
-                encoder_hidden_states=self.prompt_embeds,
-                controlnet_cond=control_image,
-                guess_mode=False,
-                return_dict=False,
-                **added_cond_kwargs,  # Pass added_cond_kwargs to controlnet
-
-            )
-            down_block_res_samples = [
-                down_sample * self.controlnet_conditioning_scale
-                for down_sample in down_samples
-            ]
-            mid_block_res_sample = self.controlnet_conditioning_scale * mid_sample
-            model_pred = self.unet(
-                x_t_latent_plus_uc,
-                t_list,
-                encoder_hidden_states=self.prompt_embeds,
-                down_block_additional_residuals=down_block_res_samples,
-                mid_block_additional_residual=mid_block_res_sample,
-                added_cond_kwargs=added_cond_kwargs,
-                return_dict=False,
-            )[0]
-        else:
-            model_pred = self.unet(
-                x_t_latent_plus_uc,
-                t_list,
-                encoder_hidden_states=self.prompt_embeds,
-                added_cond_kwargs=added_cond_kwargs,
-                return_dict=False,
-            )[0]
+        model_pred = self.unet(
+            x_t_latent_plus_uc,
+            t_list,
+            encoder_hidden_states=self.prompt_embeds,
+            down_block_additional_residuals=down_block_res_samples,
+            mid_block_additional_residual=mid_block_res_sample,
+            return_dict=False,
+            added_cond_kwargs=self.added_cond_kwargs
+        )[0]
 
         if self.guidance_scale > 1.0 and (self.cfg_type == "initialize"):
             noise_pred_text = model_pred[1:]
             self.stock_noise = torch.concat(
                 [model_pred[0:1], self.stock_noise[1:]], dim=0
-            )  # ここコメントアウトでself out cfg
+            )
         elif self.guidance_scale > 1.0 and (self.cfg_type == "full"):
             noise_pred_uncond, noise_pred_text = model_pred.chunk(2)
         else:
@@ -436,80 +305,64 @@ class StreamDiffusion:
                 self.stock_noise = init_noise + delta_x
 
         else:
-            # denoised_batch = self.scheduler.step(model_pred, t_list[0], x_t_latent).denoised
             denoised_batch = self.scheduler_step_batch(model_pred, x_t_latent, idx)
 
         return denoised_batch, model_pred
 
-    def _get_add_time_ids(
-        self, original_size, crops_coords_top_left, target_size, dtype, text_encoder_projection_dim=None
-    ):
-        add_time_ids = list(original_size + crops_coords_top_left + target_size)
+    def is_do_classifer_free_guicance(self):
+        do_classifier_free_guidance = False
+        if self.guidance_scale > 1.0:
+            do_classifier_free_guidance = True
+        return do_classifier_free_guidance
 
-        passed_add_embed_dim = (
-            self.unet.config.addition_time_embed_dim * len(add_time_ids) + text_encoder_projection_dim
+    @torch.no_grad()
+    def update_prompt(self, prompt: str, negative_prompt) -> None:
+        do_classifier_free_guidance = self.is_do_classifer_free_guicance()
+
+        encoder_output = self.pipe.encode_prompt(
+            prompt=prompt,
+            device=self.device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=do_classifier_free_guidance,
+            negative_prompt=negative_prompt
         )
-        expected_add_embed_dim = self.unet.add_embedding.linear_1.in_features
+        self.prompt_embeds = encoder_output[0].repeat(self.batch_size, 1, 1)
 
-        if expected_add_embed_dim != passed_add_embed_dim:
-            raise ValueError(
-                f"Model expects an added time embedding vector of length {expected_add_embed_dim}, but a vector of {passed_add_embed_dim} was created. The model has an incorrect config. Please check `unet.config.time_embedding_type` and `text_encoder_2.config.projection_dim`."
+        if self.use_denoising_batch and self.cfg_type == "full":
+            uncond_prompt_embeds = encoder_output[1].repeat(self.batch_size, 1, 1)
+        elif self.cfg_type == "initialize":
+            uncond_prompt_embeds = encoder_output[1].repeat(self.frame_bff_size, 1, 1)
+
+        if self.guidance_scale > 1.0 and (
+            self.cfg_type == "initialize" or self.cfg_type == "full"
+        ):
+            self.prompt_embeds = torch.cat(
+                [uncond_prompt_embeds, self.prompt_embeds], dim=0
             )
 
-        add_time_ids = torch.tensor([add_time_ids], dtype=dtype)
-        return add_time_ids
-
-    def encode_image(self, image_tensors: torch.Tensor) -> torch.Tensor:
-        image_tensors = image_tensors.to(
-            device=self.device,
-            dtype=self.vae.dtype,
-        )
-        img_latent = retrieve_latents(self.vae.encode(image_tensors), self.generator)
-        img_latent = img_latent * self.vae.config.scaling_factor
-        x_t_latent = self.add_noise(img_latent, self.init_noise[0], 0)
-        return x_t_latent
-
-    def decode_image(self, x_0_pred_out: torch.Tensor) -> torch.Tensor:               
-        output_latent = self.vae.decode(
-            x_0_pred_out / self.vae.config.scaling_factor, return_dict=False
-        )[0]
-        return output_latent
-
-
-    def predict_x0_batch(self, x_t_latent: torch.Tensor, control_image: Optional[torch.Tensor] = None) -> torch.Tensor:
-        # print("Entering predict_x0_batch")
-        added_cond_kwargs = {}
+    def predict_x0_batch(self, x_t_latent: torch.Tensor,
+                         image=None) -> torch.Tensor:
         prev_latent_batch = self.x_t_latent_buffer
+        # todo とりあえず埋める。
+        if self.ctl_image_t_buffer is None or self.x_t_latent_buffer.shape[0] >= self.ctl_image_t_buffer.shape[0]:
+            self.ctl_image_t_buffer = image.repeat(self.x_t_latent_buffer.shape[0], 1, 1, 1)
+
+        prev_ctl_image_t_buffer = self.ctl_image_t_buffer
 
         if self.use_denoising_batch:
+            t_list = self.sub_timesteps_tensor
             if self.denoising_steps_num > 1:
                 x_t_latent = torch.cat((x_t_latent, prev_latent_batch), dim=0)
-                # print("Updated x_t_latent with previous batch")
+                self.stock_noise = torch.cat(
+                    (self.init_noise[0:1], self.stock_noise[:-1]), dim=0
+                )
 
-            if self.sdxl:
-                added_cond_kwargs = {"text_embeds": self.add_text_embeds.to(self.device), "time_ids": self.add_time_ids.to(self.device)}
-                # print("Added condition kwargs for SDXL")
+                images = torch.cat(
+                    (image, prev_ctl_image_t_buffer), dim=0
+                )
 
-            if self.use_controlnet:
-                # print(f"Initial Control Image Buffer shape: {self.control_image_buffer.shape if self.control_image_buffer is not None else 'None'}")
-                if control_image is not None:
-                    control_image = control_image.to(self.device, dtype=self.dtype)
-                    if control_image.dim() == 3:
-                        control_image = control_image.unsqueeze(0)
-                    control_image = torch.cat((control_image, self.control_image_buffer), dim=0)
-                    # print(f"Concatenated current control image with buffer. New shape: {control_image.shape}")
-                else:
-                    control_image = self.control_image_buffer
-                    # print("Using control image buffer as control image")
+            x_0_pred_batch, model_pred = self.unet_step(x_t_latent, t_list, image=images)
 
-            t_list = self.sub_timesteps_tensor
-            x_t_latent = x_t_latent.to(self.device)
-            t_list = t_list.to(self.device)
-            # print("Device transfer complete for tensors")
-
-            x_0_pred_batch, model_pred = self.unet_step(x_t_latent, t_list, added_cond_kwargs=added_cond_kwargs, control_image=control_image)
-
-            #UPDATE BUFFER
             if self.denoising_steps_num > 1:
                 x_0_pred_out = x_0_pred_batch[-1].unsqueeze(0)
                 if self.do_add_noise:
@@ -521,14 +374,13 @@ class StreamDiffusion:
                     self.x_t_latent_buffer = (
                         self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
                     )
-                #new new 
-                if self.use_controlnet:
-                    self.control_image_buffer = control_image[:-self.frame_bff_size]
-
+                if self.cfg_type == "full":
+                    self.ctl_image_t_buffer = images[:-2]
+                else:
+                    self.ctl_image_t_buffer = images[:-1]
             else:
                 x_0_pred_out = x_0_pred_batch
                 self.x_t_latent_buffer = None
-                self.control_image_buffer = None
         else:
             self.init_noise = x_t_latent
             for idx, t in enumerate(self.sub_timesteps_tensor):
@@ -537,10 +389,7 @@ class StreamDiffusion:
                 ).repeat(
                     self.frame_bff_size,
                 )
-                if self.sdxl:
-                    added_cond_kwargs = {"text_embeds": self.add_text_embeds.to(self.device), "time_ids": self.add_time_ids.to(self.device)}
-                # x_0_pred, model_pred = self.unet_step(x_t_latent, t, idx=idx, added_cond_kwargs=added_cond_kwargs)
-                x_0_pred, model_pred = self.unet_step(x_t_latent, t, idx=idx, added_cond_kwargs=added_cond_kwargs, control_image=control_image)
+                x_0_pred, model_pred = self.unet_step(x_t_latent, t, idx, image=image)
                 if idx < len(self.sub_timesteps_tensor) - 1:
                     if self.do_add_noise:
                         x_t_latent = self.alpha_prod_t_sqrt[
@@ -553,69 +402,249 @@ class StreamDiffusion:
                     else:
                         x_t_latent = self.alpha_prod_t_sqrt[idx + 1] * x_0_pred
             x_0_pred_out = x_0_pred
+
         return x_0_pred_out
 
     @torch.no_grad()
-    def __call__(
-        self, 
-        x: Union[torch.Tensor, PIL.Image.Image, np.ndarray] = None,
-        control_image: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        if self.device == "cuda":
-            start = torch.cuda.Event(enable_timing=True)
-            end = torch.cuda.Event(enable_timing=True)
-            start.record()
-        if x is not None:
-            x = self.image_processor.preprocess(x, self.height, self.width).to(
+    def ctlimg2img(self, batch_size: int = 1, ctlnet_image=None, keep_latent=False) -> torch.Tensor:
+        if not keep_latent:
+            self.input_latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
                 device=self.device, dtype=self.dtype
             )
-            if self.similar_image_filter:
-                x = self.similar_filter(x)
-                if x is None:
-                    time.sleep(self.inference_time_ema)
-                    return self.prev_image_result
-            x_t_latent = self.encode_image(x)
         else:
-            # TODO: check the dimension of x_t_latent
-            x_t_latent = torch.randn((1, 4, self.latent_height, self.latent_width)).to(
-                device=self.device, dtype=self.dtype
+            if self.input_latent is None:
+                latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
+                    device=self.device, dtype=self.dtype
+                )
+                self.input_latent = latent
+
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+        tstart = time.time()
+
+        # コントロールネット用の計算
+        num_images_per_prompt = 1
+        batch_size = 1
+        guess_mode = False
+        if self.pipe.controlnet != None:
+            timage = self.pipe.prepare_image(
+                image=ctlnet_image,
+                width=self.width,
+                height=self.height,
+                batch_size=batch_size * num_images_per_prompt,
+                num_images_per_prompt=num_images_per_prompt,
+                device=self.device,
+                dtype=self.controlnet.dtype,
+                do_classifier_free_guidance=self.do_classifier_free_guidance,
+                guess_mode=guess_mode,
             )
-        x_0_pred_out = self.predict_x0_batch(x_t_latent, control_image)
+
+        ctlnet_image = timage
+
+        if self.ip_adapter and self.added_cond_kwargs and 'image_embeds' in self.added_cond_kwargs:
+            image_embeds = self.added_cond_kwargs['image_embeds']
+            image_embeds = image_embeds * self.target_image_weight
+            self.added_cond_kwargs['image_embeds'] = image_embeds
+        x_0_pred_out = self.predict_x0_batch(self.input_latent, ctlnet_image)
+
+        tstart = time.time()
         x_output = self.decode_image(x_0_pred_out).detach().clone()
+
+        tstart = time.time()
 
         self.prev_image_result = x_output
-        if self.device == "cuda":
-            end.record()
-            torch.cuda.synchronize()
-            inference_time = start.elapsed_time(end) / 1000
-            self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
+        end.record()
+        torch.cuda.synchronize()
+        inference_time = start.elapsed_time(end) / 1000
+        self.inference_time_ema = 0.9 * self.inference_time_ema + 0.1 * inference_time
         return x_output
 
-    @torch.no_grad()
-    def txt2img(self, batch_size: int = 1, control_image: Optional[torch.Tensor] = None) -> torch.Tensor:
-        x_0_pred_out = self.predict_x0_batch(
-            torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
-                device=self.device, dtype=self.dtype
-            ),
-            control_image,
-        )
-        x_output = self.decode_image(x_0_pred_out).detach().clone()
-        return x_output
-    
+# Video saving logic
+def image_generation_process(
+    queue: Queue,
+    fps_queue: Queue,
+    close_queue: Queue,
+    model_id_or_path: str,
+    lora_dict: Optional[Dict[str, float]],
+    prompt: str,
+    negative_prompt: str,
+    frame_buffer_size: int,
+    width: int,
+    height: int,
+    acceleration: Literal["none", "xformers", "tensorrt"],
+    use_denoising_batch: bool,
+    seed: int,
+    cfg_type: Literal["none", "full", "self", "initialize"],
+    guidance_scale: float,
+    delta: float,
+    do_add_noise: bool,
+    enable_similar_image_filter: bool,
+    similar_image_filter_threshold: float,
+    similar_image_filter_max_skip_frame: float,
+    monitor_receiver: Connection,
+    engine_dir: Optional[Union[str, Path]],
+    prompt_queue,
+    video_file_path: Optional[str] = None,
+    save_video: bool = False,  # Add save_video argument
+    use_lcm_lora: bool = True,
+    use_tiny_vae: bool = True,
+    t_index_list: Optional[List[int]] = None,  # Include T_INDEXT_LIST
+) -> None:
+    # Add a VideoWriter to save the output video if save_video is True
+    video_writer = None
+    video_fps = None
 
-    def txt2img_sd_turbo(self, batch_size: int = 1) -> torch.Tensor:
-        x_t_latent = torch.randn(
-            (batch_size, 4, self.latent_height, self.latent_width),
-            device=self.device,
-            dtype=self.dtype,
-        )
-        model_pred = self.unet(
-            x_t_latent,
-            self.sub_timesteps_tensor,
-            encoder_hidden_states=self.prompt_embeds,
-            return_dict=False,
-        )[0]
-        x_0_pred_out = (
-            x_t_latent - self.beta_prod_t_sqrt * model_pred
-        ) / self.alpha_prod_t_sqrt
-        return self.decode_image(x_0_pred_out)
+    if save_video and video_file_path:
+        # Capture video properties
+        video_capture = cv2.VideoCapture(video_file_path)
+        if video_capture.isOpened():
+            video_fps = video_capture.get(cv2.CAP_PROP_FPS)
+
+            # Extract input file directory and filename
+            input_dir = os.path.dirname(video_file_path)
+            input_filename = os.path.basename(video_file_path)
+
+            # Create a timestamp to append to the filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Convert T_INDEXT_LIST to a string and clean up for filenames (replace spaces, commas)
+            if t_index_list:
+                t_index_str = "_".join(map(str, t_index_list))
+            else:
+                t_index_str = "no_index_list"
+
+            # Generate the output filename with the timestamp and T_INDEXT_LIST
+            output_filename = f"{os.path.splitext(input_filename)[0]}_{timestamp}_TList_{t_index_str}.mov"
+            output_video_path = os.path.join(input_dir, output_filename)
+
+            # Create VideoWriter with lossless MOV format
+            fourcc = cv2.VideoWriter_fourcc(*'avc1')  # Lossless codec
+            video_writer = cv2.VideoWriter(output_video_path, fourcc, video_fps, (width, height))
+
+    # Your existing image generation logic goes here...
+
+    while True:
+        try:
+            # Your existing logic to generate images goes here...
+
+            if save_video and video_writer is not None:
+                for output_image in output_images:
+                    # Convert output_image (PIL) to a format OpenCV can handle
+                    opencv_image = cv2.cvtColor(np.array(output_image), cv2.COLOR_RGB2BGR)
+                    video_writer.write(opencv_image)
+
+            # Rest of the existing code...
+        except KeyboardInterrupt:
+            break
+
+    # Release video writer when done
+    if video_writer is not None:
+        video_writer.release()
+
+def main(
+    model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
+    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors": 0.9},
+    prompt: str = "xshingoboy",
+    negative_prompt: str = "low quality, bad quality, blurry, low resolution",
+    frame_buffer_size: int = 1,
+    width: int = SD_WIDTH,
+    height: int = SD_HEIGHT,
+    acceleration: Literal["none", "xformers", "tensorrt"] = "none",
+    use_denoising_batch: bool = True,
+    seed: int = 2,
+    cfg_type: Literal["none", "full", "self", "initialize"] = "none",
+    guidance_scale: float = 1.4,
+    delta: float = 0.5,
+    do_add_noise: bool = False,
+    enable_similar_image_filter: bool = True,
+    similar_image_filter_threshold: float = 0.99,
+    similar_image_filter_max_skip_frame: float = 10,
+    engine_dir: Optional[Union[str, Path]] = "engines",
+    video_file_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",
+    save_video: bool = False,  # Add save_video argument
+    t_index_list: List[int] = [0, 10, 35],  # T_INDEXT_LIST is passed here
+) -> None:
+    """
+    メイン関数
+    """
+
+    ctx = get_context('spawn')
+    queue = ctx.Queue()
+    fps_queue = ctx.Queue()
+    prompt_queue = ctx.Queue()
+    close_queue = Queue()
+
+    do_add_noise = False
+    monitor_sender, monitor_receiver = ctx.Pipe()
+
+    prompt_process = ctx.Process(
+        target=prompt_window,
+        args=(
+            prompt_queue,
+        ),
+    )
+    prompt_process.start()
+
+    process1 = ctx.Process(
+        target=image_generation_process,
+        args=(
+            queue,
+            fps_queue,
+            close_queue,
+            model_id_or_path,
+            lora_dict,
+            prompt,
+            negative_prompt,
+            frame_buffer_size,
+            width,
+            height,
+            acceleration,
+            use_denoising_batch,
+            seed,
+            cfg_type,
+            guidance_scale,
+            delta,
+            do_add_noise,
+            enable_similar_image_filter,
+            similar_image_filter_threshold,
+            similar_image_filter_max_skip_frame,
+            monitor_receiver,
+            engine_dir,
+            prompt_queue,
+            video_file_path,  # 追加
+            save_video,  # Pass save_video argument
+            t_index_list,  # Pass T_INDEXT_LIST
+        ),
+    )
+    process1.start()
+
+    monitor_process = ctx.Process(
+        target=monitor_setting_process,
+        args=(
+            width,
+            height,
+            monitor_sender,
+        ),
+    )
+    monitor_process.start()
+    monitor_process.join()
+
+    process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
+    process2.start()
+
+    # terminate
+    process2.join()
+    print("process2 terminated.")
+    close_queue.put(True)
+    print("process1 terminating...")
+    process1.join(5)  # with timeout
+    if process1.is_alive():
+        print("process1 still alive. force killing...")
+        process1.terminate()  # force kill...
+    process1.join()
+    print("process1 terminated.")
+
+
+if __name__ == "__main__":
+    fire.Fire(main)

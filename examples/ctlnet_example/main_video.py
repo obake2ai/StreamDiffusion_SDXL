@@ -914,12 +914,42 @@ def image_generation_process(
     engine_dir: Optional[Union[str, Path]],
     prompt_queue,
     video_file_path: Optional[str] = None,
+    save_video: bool = False,  # Add save_video argument
     use_lcm_lora: bool = True,
     use_tiny_vae: bool = True,
+    t_index_list: Optional[List[int]] = None,  # Include T_INDEXT_LIST
 ) -> None:
-    """
-    画像生成プロセスの関数
-    """
+    # Add a VideoWriter to save the output video if save_video is True
+    video_writer = None
+    video_fps = None
+
+    if save_video and video_file_path:
+        # Capture video properties
+        video_capture = cv2.VideoCapture(video_file_path)
+        if video_capture.isOpened():
+            video_fps = video_capture.get(cv2.CAP_PROP_FPS)
+
+            # Extract input file directory and filename
+            input_dir = os.path.dirname(video_file_path)
+            input_filename = os.path.basename(video_file_path)
+
+            # Create a timestamp to append to the filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Convert T_INDEXT_LIST to a string and clean up for filenames (replace spaces, commas)
+            if t_index_list:
+                t_index_str = "_".join(map(str, t_index_list))
+            else:
+                t_index_str = "no_index_list"
+
+            # Generate the output filename with the timestamp and T_INDEXT_LIST
+            output_filename = f"{os.path.splitext(input_filename)[0]}_{timestamp}_TList_{t_index_str}.mov"
+            output_video_path = os.path.join(input_dir, output_filename)
+
+            # Create VideoWriter with lossless MOV format
+            fourcc = cv2.VideoWriter_fourcc(*'avc1')  # Lossless codec
+            video_writer = cv2.VideoWriter(output_video_path, fourcc, video_fps, (width, height))
+
 
     global inputs
     global box_prompt
@@ -928,7 +958,7 @@ def image_generation_process(
     # パラメタ
     ######################################################
     adapter = True
-    ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
+    ip_adapter_image_filepath = IP_ADAPTER_IMAGE
 
     t_index_list = T_INDEXT_LIST
     cfg_type = "none"
@@ -984,8 +1014,8 @@ def image_generation_process(
     )
 
     # LoRAの読み込み
-    pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")
-    pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
+    pipe.load_lora_weights(LORA_PATH, adapter_name=LORA_NAME)
+    pipe.set_adapters([LORA_NAME], adapter_weights=[1.0])
     # pipe.load_lora_weights("./models/LoRA/xshingogirl.safetensors", adapter_name="xshingogirl")
     # pipe.set_adapters(["xshingogirl"], adapter_weights=[1.0])
     # pipe.load_lora_weights("./models/LoRA/xshingositu.safetensors", adapter_name="xshingositu")
@@ -1083,6 +1113,12 @@ def image_generation_process(
             process_time = time.time() - start_time
             fps = 1 / (process_time)
             fps_queue.put(fps)
+            if save_video and video_writer is not None:
+                for output_image in output_images:
+                    # Convert output_image (PIL) to a format OpenCV can handle
+                    opencv_image = cv2.cvtColor(np.array(output_image), cv2.COLOR_RGB2BGR)
+                    video_writer.write(opencv_image)
+
         except KeyboardInterrupt:
             break
 
@@ -1091,10 +1127,14 @@ def image_generation_process(
     input_thread.join()
     print(f"fps: {fps}")
 
+    # Release video writer when done
+    if video_writer is not None:
+        video_writer.release()
+
 
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
-    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingoboy.safetensors": 0.9},
+    lora_dict: Optional[Dict[str, float]] = {LORA_PATH: 1.0},
     prompt: str = "xshingoboy",
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
@@ -1112,6 +1152,8 @@ def main(
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
     video_file_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",
+    save_video: bool = True,  # Add save_video argument
+    t_index_list: List[int] = T_INDEXT_LIST,  # T_INDEXT_LIST is passed here
 ) -> None:
     """
     メイン関数
@@ -1161,6 +1203,9 @@ def main(
             engine_dir,
             prompt_queue,
             video_file_path  # 追加
+            video_file_path,  # 追加
+            save_video,  # Pass save_video argument
+            t_index_list,  # Pass T_INDEXT_LIST
         ),
     )
     process1.start()
