@@ -925,7 +925,7 @@ def image_generation_process(
     video_fps = None
 
     if save_video and video_file_path:
-        prinit ("video save mode")
+        print ("video save mode")
         video_capture = cv2.VideoCapture(video_file_path)
         if video_capture.isOpened():
             video_fps = video_capture.get(cv2.CAP_PROP_FPS)
