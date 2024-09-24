@@ -30,8 +30,6 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 from datetime import datetime
-import psutil
-import signal
 
 from stream_info import *
 
@@ -1089,34 +1087,23 @@ def image_generation_process(
     )
 
     # カメラが接続されているか確認
-    if video_file_path is not None:
-        input_source = 'video'
-    else:
-        cap = cv2.VideoCapture(0)
-        if cap.isOpened():
-            input_source = 'camera'
-            cap.release()
+    # 動画モードの場合、ウィンドウは立ち上げない
+    if not save_video:
+        monitor_list = monitor_receiver.recv()
+        if len(monitor_list) > 1:
+            monitor_info = monitor_list[1]  # 2番目のモニター
         else:
-            input_source = 'screen'
-
-    monitor_list = monitor_receiver.recv()
-    # 使用するモニターの情報を取得（ここでは2番目のモニターを使用）
-    if len(monitor_list) > 1:
-        monitor_info = monitor_list[1]  # 2番目のモニター
-    else:
-        monitor_info = monitor_list[0]  # メインモニター
+            monitor_info = monitor_list[0]  # メインモニター
 
     event = threading.Event()
     event.clear()
 
-    if input_source == 'camera':
-        input_thread = threading.Thread(target=camera, args=(event, height, width, monitor_info))
-    elif input_source == 'video':
-        input_thread = threading.Thread(target=read_video, args=(event, video_file_path, height, width, monitor_info))
-    else:
-        input_thread = threading.Thread(target=screen, args=(event, height, width, monitor_info))
-
-    input_thread.start()
+    if not save_video:
+        if video_file_path is not None:
+            input_thread = threading.Thread(target=read_video, args=(event, video_file_path, height, width, monitor_info))
+        else:
+            input_thread = threading.Thread(target=screen, args=(event, height, width, monitor_info))
+        input_thread.start()
     time.sleep(1)
     current_prompt = box_prompt
     while True:
