@@ -923,6 +923,7 @@ def image_generation_process(
     # Add a VideoWriter to save the output video if save_video is True
     video_writer = None
     video_fps = None
+    frame_count = 0
 
     if save_video and video_file_path:
         print("PNG保存モード")
