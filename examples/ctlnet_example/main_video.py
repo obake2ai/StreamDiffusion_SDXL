@@ -42,9 +42,20 @@ box_prompt = "xshingoboy"
 
 def tensor_to_pil(tensor: torch.Tensor) -> Image.Image:
     """Convert a Tensor to a PIL Image."""
-    tensor = tensor.detach().cpu().float().numpy()
-    tensor = np.moveaxis(tensor, 0, -1)
-    tensor = np.clip(tensor * 255, 0, 255).astype(np.uint8)
+    # もしテンソルがGPU上なら、CPUに移動
+    tensor = tensor.detach().cpu().float()
+
+    # チャンネル数が4 (バッチサイズ含む)の場合、最初の次元を削除
+    if tensor.ndim == 4:
+        tensor = tensor.squeeze(0)
+
+    # 値を 0-1 に正規化してから 0-255 の範囲にスケーリングして uint8 型にキャスト
+    tensor = (tensor * 255).clamp(0, 255).byte()
+
+    # (C, H, W) を (H, W, C) に変換
+    tensor = tensor.permute(1, 2, 0).numpy()
+
+    # PIL Image に変換
     return Image.fromarray(tensor)
 
 
