@@ -38,7 +38,7 @@ from main_video import StreamDiffusionControlNetSample, close_all_windows
 box_prompt = "xshingogirl"
 ###############################################
 
-UPEER_FPS = 10
+UPEER_FPS = 1
 fps_interval = 1.0 / UPEER_FPS
 inputs = []
 top = 0
