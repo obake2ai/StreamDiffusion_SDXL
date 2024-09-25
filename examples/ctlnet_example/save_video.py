@@ -487,6 +487,9 @@ def image_generation_process(
                     # データをCPUに移動してnumpyに変換
                     output_image_np = output_image.squeeze().cpu().numpy()
 
+                    print(f"Tensorの値の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
+
+
                     # ガンマ補正前の確認
                     # output_imageの範囲が[0, 1]なら、[0, 255]に変換し、uint8にキャスト
                     if output_image_np.dtype != np.uint8:
