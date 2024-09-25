@@ -382,6 +382,9 @@ def image_generation_process(
                              torch_dtype=torch.float16)
         pipe.set_ip_adapter_scale(0.8)
 
+    pipe.load_lora_weights("./models/LoRA/xshingogirl.safetensors", adapter_name="xshingogirl")
+    pipe.set_adapters(["xshingogirl"], adapter_weights=[1.0])
+
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
         pipe,
