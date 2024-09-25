@@ -318,7 +318,7 @@ def image_generation_process(
     monitor_receiver: Connection,
     engine_dir: Optional[Union[str, Path]],
     prompt_queue,
-    video_file_path: Optional[str] = "./test",
+    video_file_path: Optional[str] = None,
     use_lcm_lora: bool = True,
     use_tiny_vae: bool = True,
     output_dir: str = './output_images',  # 画像保存先フォルダの指定
@@ -475,28 +475,31 @@ def image_generation_process(
 
             if frame_buffer_size == 1:
                 output_images = [output_images]
+
             for output_image in output_images:
                 queue.put(output_image, block=False)
 
-                # Convert tensor to a format PIL can handle
-                output_image_np = output_image.squeeze().cpu().numpy()  # Remove extra dimensions if any
+                # output_imageがtorch.Tensor型の場合、変換
+                if isinstance(output_image, torch.Tensor):
+                    # データをCPUに移動してnumpyに変換
+                    output_image_np = output_image.squeeze().cpu().numpy()
 
-                # Normalize and convert to uint8 if necessary
-                if output_image_np.dtype != np.uint8:
-                    output_image_np = (output_image_np * 255).astype(np.uint8)  # Assuming image values are between 0 and 1
+                    # output_imageの範囲が[0, 1]なら、[0, 255]に変換し、uint8にキャスト
+                    if output_image_np.dtype != np.uint8:
+                        output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
 
-                # Check if image has a single channel or multiple channels
-                if output_image_np.ndim == 2:  # Grayscale image
-                    output_pil_image = Image.fromarray(output_image_np, mode='L')
-                elif output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB image with channels first
-                    output_pil_image = Image.fromarray(np.moveaxis(output_image_np, 0, -1))  # Move channels to last dimension
-                else:
-                    raise ValueError(f"Unexpected image format: {output_image_np.shape}")
+                    # プレビュー画面で表示している画像と同じようにチャンネル順を調整
+                    # チャンネルが最初 (C, H, W) の場合は、(H, W, C)に変換
+                    if output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB画像の場合
+                        output_image_np = np.moveaxis(output_image_np, 0, -1)
 
-                # Save the image
-                image_index += 1  # Increment image index
-                output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
-                output_pil_image.save(output_image_path)  # Save the image
+                    # PIL Imageに変換
+                    output_pil_image = Image.fromarray(output_image_np)
+
+                    # 画像を保存
+                    image_index += 1  # 連番のインデックスを更新
+                    output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
+                    output_pil_image.save(output_image_path)  # PNG形式で保存
 
             process_time = time.time() - start_time
             if process_time <= fps_interval:
