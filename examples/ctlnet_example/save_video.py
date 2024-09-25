@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import threading
+import json
 from typing import List, Optional, Union, Any, Dict, Tuple, Literal
 import numpy as np
 from pathlib import Path
@@ -15,6 +16,8 @@ import tkinter as tk
 import cv2
 import traceback
 from screeninfo import get_monitors
+from datetime import datetime
+import shutil
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -31,367 +34,90 @@ from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 
 from main_video import StreamDiffusionControlNetSample, close_all_windows
-from datetime import datetime
-from stream_info import *
 
 ###############################################
-# プロンプトはここ
+# JSONから設定を読み込む関数
 ###############################################
-box_prompt = PROMPT
-###############################################
+def load_config_from_json(json_path: str) -> Dict[str, Any]:
+    with open(json_path, 'r') as file:
+        return json.load(file)
 
-def create_output_dir(video_file_path: str, save_dir: str = SAVE_PNG_DIR) -> str:
-    # 現在の日時を取得し、フォーマット
+# 出力ディレクトリを作成する関数
+def create_output_dir(video_file_path: str, save_dir: str) -> str:
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     base_name = os.path.splitext(os.path.basename(video_file_path))[0]
     output_dir = os.path.join(save_dir, base_name, current_time)
-
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-
     return output_dir
 
-def screen(
-    event: threading.Event(),
-    height: int = 512,
-    width: int = 512,
-    monitor: Dict[str, int] = {"top": 300, "left": 200, "width": 512 * 2, "height": 512 * 2},
-):
-    global inputs
-
-    with mss.mss() as sct:
-        while True:
-            if event.is_set():
-                print("terminate read thread")
-                break
-            start_time = time.time()
-            img = sct.grab(monitor)
-            img = PIL.Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
-            img = img.resize((height, width))
-            inputs.append(pil2tensor(img))
-            interval = time.time() - start_time
-            fps_interval = 1.0 / UPEER_FPS
-            if interval < fps_interval:
-                sleep_time = fps_interval - interval
-                time.sleep(sleep_time)
-
-    print('exit : screen')
-
-
-def camera(
-    event: threading.Event(),
-    height: int = 512,
-    width: int = 512,
-    monitor_info: Dict[str, Any] = None,
-):
-    global inputs
-
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Cannot open camera")
-        return
-
-    # カメラウィンドウを設定
-    cv2.namedWindow("Camera Input", cv2.WINDOW_NORMAL)
-    if monitor_info:
-        # ウィンドウを別モニターに移動
-        monitor_x = monitor_info['left']
-        monitor_y = monitor_info['top']
-        cv2.moveWindow("Camera Input", monitor_x, monitor_y)
-        # ウィンドウサイズをモニターサイズに合わせる
-        cv2.resizeWindow("Camera Input", width, height)
-
-    try:
-        while True:
-            if event.is_set():
-                print("terminate camera thread")
-                break
-
-            start_time = time.time()
-
-            ret, frame = cap.read()
-            if not ret:
-                print("Can't receive frame (stream end?). Exiting ...")
-                break
-
-            # Convert the frame to PIL Image
-            img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-            # Crop the image from the center
-            img_width, img_height = img.size
-            left_crop = (img_width - width) // 2
-            top_crop = (img_height - height) // 2
-            right_crop = left_crop + width
-            bottom_crop = top_crop + height
-            img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
-
-            # Resize cropped image to fit the monitor window size
-            img_resized = img_cropped
-
-            # Display the resized cropped image
-            cv2.imshow("Camera Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
-            if cv2.waitKey(1) == ord('q'):
-                break
-
-            inputs.append(pil2tensor(img_cropped))
-
-            interval = time.time() - start_time
-            fps_interval = 1.0 / UPEER_FPS
-            if interval < fps_interval:
-                sleep_time = fps_interval - interval
-                time.sleep(sleep_time)
-    finally:
-        cap.release()
-        cv2.destroyWindow("Camera Input")
-        print('exit : camera')
-
-def read_video(
-    event: threading.Event(),
-    video_file_path: str,
-    height: int = 512,
-    width: int = 512,
-    monitor_info: Dict[str, Any] = None,
-    resize_mode: bool = True,
-    close_queue: Queue = None,  # 追加
-):
-    global inputs
-
-    cap = cv2.VideoCapture(video_file_path)
-    if not cap.isOpened():
-        print(f"Cannot open video file {video_file_path}")
-        return
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    print(f"Total frames in video: {total_frames}")
-
-
-    cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
-    if monitor_info:
-        monitor_x = monitor_info['left']
-        monitor_y = monitor_info['top']
-        cv2.moveWindow("Video Input", monitor_x, monitor_y)
-        cv2.resizeWindow("Video Input", width, height)
-
-    try:
-        while True:
-            if event.is_set():
-                print("terminate video thread")
-                break
-
-            start_time = time.time()
-
-            ret, frame = cap.read()
-            if not ret:
-                print("End of video file reached.")
-                if close_queue:  # 終了を通知
-                    close_queue.put(True)
-                break
-                # cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
-                # continue
-
-            img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-            if resize_mode:
-                img_resized = img.resize((width, height))
-            else:
-                img_width, img_height = img.size
-                left_crop = (img_width - width) // 2
-                top_crop = (img_height - height) // 2
-                right_crop = left_crop + width
-                bottom_crop = top_crop + height
-                img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
-                img_resized = img_cropped
-
-            cv2.imshow("Video Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
-            if cv2.waitKey(1) == ord('q'):
-                break
-
-            inputs.append(pil2tensor(img_resized))
-
-            interval = time.time() - start_time
-            fps_interval = 1.0 / UPEER_FPS
-            if interval < fps_interval:
-                sleep_time = fps_interval - interval
-                time.sleep(sleep_time)
-    finally:
-        cap.release()
-        cv2.destroyWindow("Video Input")
-        print('exit : read_video')
-
-def dummy_screen(
-        width: int,
-        height: int,
-):
-    root = tk.Tk()
-    root.title("Press Enter to start")
-    root.geometry(f"{width}x{height}")
-    root.resizable(False, False)
-    root.attributes("-alpha", 0.8)
-    root.configure(bg="black")
-
-    def destroy(event):
-        root.destroy()
-
-    def update_geometry(event):
-        global top, left
-        top = root.winfo_y()
-        left = root.winfo_x()
-
-    root.bind("<Return>", destroy)
-    root.bind("<Configure>", update_geometry)
-    root.mainloop()
-    return {"top": top, "left": left, "width": width, "height": height}
-
-def monitor_setting_process(
-    width: int,
-    height: int,
-    monitor_sender: Connection,
-) -> None:
-    # すべてのモニター情報を取得
-    monitors = get_monitors()
-    monitor_list = []
-    for m in monitors:
-        monitor_list.append({
-            "id": m.name,
-            "width": m.width,
-            "height": m.height,
-            "left": m.x,
-            "top": m.y
-        })
-    monitor_sender.send(monitor_list)
-
-
-def apply_gamma_correction(image_np, gamma=2.2):
-    return np.power(image_np, 1.0 / gamma)
-
-def normalize_image(image_np):
-    # Tensorの最小値と最大値を計算
-    min_val = image_np.min()
-    max_val = image_np.max()
-
-    # 全体を[0, 1]にスケーリング（min-max正規化）
-    normalized_image = (image_np - min_val) / (max_val - min_val)
-
-    return normalized_image
-
-base_img = None
-
+# JSONをコピーする関数
+def copy_config_to_output(json_path: str, output_dir: str):
+    shutil.copy(json_path, os.path.join(output_dir, os.path.basename(json_path)))
 
 def image_generation_process(
     queue: Queue,
     fps_queue: Queue,
     close_queue: Queue,
-    model_id_or_path: str,
-    lora_dict: Optional[Dict[str, float]],
-    prompt: str,
-    negative_prompt: str,
-    frame_buffer_size: int,
-    width: int,
-    height: int,
-    acceleration: Literal["none", "xformers", "tensorrt"],
-    use_denoising_batch: bool,
-    seed: int,
-    cfg_type: Literal["none", "full", "self", "initialize"],
-    guidance_scale: float,
-    delta: float,
-    do_add_noise: bool,
-    enable_similar_image_filter: bool,
-    similar_image_filter_threshold: float,
-    similar_image_filter_max_skip_frame: float,
-    monitor_receiver: Connection,
-    engine_dir: Optional[Union[str, Path]],
+    config: Dict[str, Any],  # 設定をJSONから受け取る
     prompt_queue,
-    video_file_path: Optional[str] = None,
-    use_lcm_lora: bool = True,
-    use_tiny_vae: bool = True,  # 画像保存先フォルダの指定
+    monitor_receiver: Connection,
 ) -> None:
-    """
-    画像生成プロセスの関数
-    """
-
     global inputs
-    global box_prompt
-    instep = 50
-    image_index = 0  # 連番用のカウンタを追加
-    output_dir=None
+    global base_img
 
-    ######################################################
-    # パラメタ
-    ######################################################
+    instep = config["INSTEP"]
+    image_index = 0
+    output_dir = create_output_dir(config["VIDEO_PATH"], config["SAVE_PNG_DIR"])
+    print(f"Output directory created: {output_dir}")
+
+    t_index_list = config["T_INDEX_LIST"]
+    guidance_scale = config["GUIDANCE_SCALE"]
+    delta = config["DELTA"]
+    prompt = config["PROMPT"]
+    negative_prompt = config["NEGATIVE_PROMPT"]
+
     adapter = True
-    ip_adapter_image_filepath = IP_ADAPTER_IMAGE
+    ip_adapter_image_filepath = config["IP_ADAPTER_IMAGE"]
 
-    t_index_list = [0, 17, 35]
-    cfg_type = "none"
-    delta = 1.0
-
-    # Trueで潜在空間の乱数を固定します。
-    keep_latent = True
-
-    # fullで有効
-    negative_prompt = """(deformed:1.3),(malformed hands:1.4),(poorly drawn hands:1.4),(mutated fingers:1.4),(bad anatomy:1.3),(extra limbs:1.35),(poorly drawn face:1.4),(signature:1.2),(artist name:1.2),(watermark:1.2),(worst quality, low quality, normal quality:1.4), lowres,skin blemishes,extra fingers,fewer fingers,strange fingers,Hand grip,(lean),Strange eyes,(three arms),(Many arms),(watermarking)"""
-    ######################################################
-
-    # フォルダの作成
-    if not output_dir:
-        output_dir = create_output_dir(video_file_path)
-        print(f"Output directory created: {output_dir}")
-
-    # ControlNetモデルの準備
+    # モデル準備
     controlnet_pose = ControlNetModel.from_pretrained(
         "lllyasviel/control_v11p_sd15_openpose",
         torch_dtype=torch.float16
     ).to("cuda")
 
-    # ipAdapterのイメージエンコーダ
-    image_encoder = None
-    if adapter:
-        image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-            "h94/IP-Adapter",
-            subfolder="models/image_encoder",
-            torch_dtype=torch.float16,
-        ).to("cuda")
+    image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+        "h94/IP-Adapter",
+        subfolder="models/image_encoder",
+        torch_dtype=torch.float16,
+    ).to("cuda")
 
     pipe = StableDiffusionControlNetPipeline.from_pretrained(
-        "Lykon/dreamshaper-8-lcm",
+        config["MODEL_PATH"],
         controlnet=controlnet_pose,
-        image_encoder=image_encoder).to(
-            device=torch.device("cuda"),
-            dtype=torch.float16,
-        )
+        image_encoder=image_encoder
+    ).to("cuda")
 
-    if adapter:
-        pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models",
-                             weight_name="ip-adapter_sd15.bin",
-                             torch_dtype=torch.float16)
-        pipe.set_ip_adapter_scale(0.8)
+    pipe.load_lora_weights(config["LORA_PATH"], adapter_name=config["LORA_NAME"])
+    pipe.set_adapters([config["LORA_NAME"]], adapter_weights=[1.0])
 
-    pipe.load_lora_weights(LORA_PATH, adapter_name=LORA_NAME)
-    pipe.set_adapters([LORA_NAME], adapter_weights=[1.0])
-
-    # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
         pipe,
         t_index_list=t_index_list,
         torch_dtype=torch.float16,
-        cfg_type=cfg_type,
-        width=width,
-        height=height,
+        cfg_type="none",
+        width=config["SD_WIDTH"],
+        height=config["SD_HEIGHT"],
         ip_adapter=adapter,
-        acceleration=acceleration,
-        model_id_or_path=model_id_or_path,
+        acceleration="none",
+        model_id_or_path=config["MODEL_PATH"],
     )
 
-    # Tiny VAEで高速化
     stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
-
-    ip_adapter_image = None
-    if adapter:
-        print("prepare ip adapter")
-        ip_adapter_image = load_image(ip_adapter_image_filepath)
+    ip_adapter_image = load_image(ip_adapter_image_filepath)
 
     stream.prepare(
-        prompt=box_prompt,
+        prompt=prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=instep,
         guidance_scale=guidance_scale,
@@ -399,220 +125,85 @@ def image_generation_process(
         ip_adapter_image=ip_adapter_image
     )
 
-    # カメラが接続されているか確認
-    if video_file_path is not None:
-        input_source = 'video'
-    else:
-        cap = cv2.VideoCapture(0)
-        if cap.isOpened():
-            input_source = 'camera'
-            cap.release()
-        else:
-            input_source = 'screen'
-
-    monitor_list = monitor_receiver.recv()
-    if len(monitor_list) > 1:
-        monitor_info = monitor_list[1]  # 2番目のモニター
-    else:
-        monitor_info = monitor_list[0]  # メインモニター
-
     event = threading.Event()
     event.clear()
 
-    if input_source == 'camera':
-        input_thread = threading.Thread(target=camera, args=(event, height, width, monitor_info))
-    elif input_source == 'video':
-        input_thread = threading.Thread(target=read_video, args=(event, video_file_path, height, width, monitor_info))
-    else:
-        input_thread = threading.Thread(target=screen, args=(event, height, width, monitor_info))
+    # 入力ソースに応じて処理を分岐
+    input_source = 'video'
+    monitor_list = monitor_receiver.recv()
+    monitor_info = monitor_list[0]
 
+    input_thread = threading.Thread(target=read_video, args=(event, config["VIDEO_PATH"], config["SD_HEIGHT"], config["SD_WIDTH"], monitor_info))
     input_thread.start()
-    time.sleep(1)
-    current_prompt = box_prompt
-    total_frames=0
 
+    total_frames = 0
     while True:
         try:
-
-            if not close_queue.empty():  # close_queueに終了信号が来たら停止
+            if not close_queue.empty():
                 print("Termination signal received.")
                 break
-            if len(inputs) < frame_buffer_size:
-                time.sleep(fps_interval)
+            if len(inputs) < config["FRAME_BUFFER_SIZE"]:
+                time.sleep(config["FPS_INTERVAL"])
                 continue
+
             start_time = time.time()
-            sampled_inputs = []
-            for i in range(frame_buffer_size):
-                index = (len(inputs) // frame_buffer_size) * i
-                sampled_inputs.append(inputs[len(inputs) - index - 1])
+            sampled_inputs = [inputs.pop() for _ in range(config["FRAME_BUFFER_SIZE"])]
             input_batch = torch.cat(sampled_inputs)
-            inputs.clear()
-            new_prompt = current_prompt
-            if not prompt_queue.empty():
-                new_prompt = prompt_queue.get(block=False)
-
-            prompt_change = False
-            if current_prompt != new_prompt:
-                current_prompt = new_prompt
-                stream.update_prompt(current_prompt, negative_prompt)
-                prompt_change = True
-
             input = input_batch.to(device=stream.device, dtype=stream.dtype)
-            global base_img
-            if base_img is None:
-                base_img = input
 
-            output_images = stream.ctlimg2img(ctlnet_image=input, keep_latent=keep_latent)
-
-            if frame_buffer_size == 1:
-                output_images = [output_images]
-            total_frames+=len(output_images)
+            output_images = stream.ctlimg2img(ctlnet_image=input)
+            total_frames += len(output_images)
             print(f"\rtotal {total_frames}", end='', flush=True)
 
             for output_image in output_images:
                 queue.put(output_image, block=False)
-
-                # output_imageがtorch.Tensor型の場合、変換
                 if isinstance(output_image, torch.Tensor):
-                    # データをCPUに移動してnumpyに変換
-                    output_image_np = output_image.squeeze().cpu().numpy()
-
-                    # 値の範囲を確認
-                    #print(f"Tensorの値の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
-
-                    # 値を正規化して、[0, 1]の範囲にスケーリング
-                    output_image_np = normalize_image(output_image_np)
-
-                    # [0, 255]にスケーリングし、uint8にキャスト
+                    output_image_np = normalize_image(output_image.squeeze().cpu().numpy())
                     output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
-
-                    # チャンネルの順序を調整 (C, H, W) -> (H, W, C)
-                    if output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB画像の場合
-                        output_image_np = np.moveaxis(output_image_np, 0, -1)
-
-                    # 変換後の値の範囲を再確認
-                    #print(f"画像データの変換後の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
-
-                    # PIL Imageに変換
+                    output_image_np = np.moveaxis(output_image_np, 0, -1)
                     output_pil_image = Image.fromarray(output_image_np)
-
-                    # 画像を保存
-                    image_index += 1  # 連番のインデックスを更新
-                    output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
-                    output_pil_image.save(output_image_path)  # PNG形式で保存
+                    image_index += 1
+                    output_pil_image.save(os.path.join(output_dir, f"output_image_{image_index:04d}.png"))
 
             process_time = time.time() - start_time
-            if process_time <= fps_interval:
-                time.sleep(fps_interval - process_time)
-            process_time = time.time() - start_time
-            fps = 1 / (process_time)
-            fps_queue.put(fps)
+            if process_time <= config["FPS_INTERVAL"]:
+                time.sleep(config["FPS_INTERVAL"] - process_time)
+            fps_queue.put(1 / process_time)
         except KeyboardInterrupt:
             break
-        except:
-            print("An error occurred.")
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+            traceback.print_exc()
             break
 
-
-def main(
-    model_id_or_path: str = MODEL_PATH,
-    lora_dict: Optional[Dict[str, float]] = {LORA_PATH: 1.0},
-    prompt: str = PROMPT,
-    negative_prompt: str = "low quality, bad quality, blurry, low resolution",
-    frame_buffer_size: int = 1,
-    width: int = SD_WIDTH,
-    height: int = SD_HEIGHT,
-    acceleration: Literal["none", "xformers", "tensorrt"] = "none",
-    use_denoising_batch: bool = True,
-    seed: int = 2,
-    cfg_type: Literal["none", "full", "self", "initialize"] = "none",
-    guidance_scale: float = 1.4,
-    delta: float = 0.5,
-    do_add_noise: bool = False,
-    enable_similar_image_filter: bool = True,
-    similar_image_filter_threshold: float = 0.99,
-    similar_image_filter_max_skip_frame: float = 10,
-    engine_dir: Optional[Union[str, Path]] = "engines",
-    video_file_path: Optional[str] = VIDEO_PATH,
-) -> None:
-    """
-    メイン関数
-    """
-
+def main(json_config: str):
+    config = load_config_from_json(json_config)
     ctx = get_context('spawn')
     queue = ctx.Queue()
     fps_queue = ctx.Queue()
     prompt_queue = ctx.Queue()
     close_queue = Queue()
-
-    do_add_noise = False
     monitor_sender, monitor_receiver = ctx.Pipe()
-
-    # prompt_process = ctx.Process(
-    #     target=prompt_window,
-    #     args=(
-    #         prompt_queue,
-    #     ),
-    # )
-    # prompt_process.start()
 
     process1 = ctx.Process(
         target=image_generation_process,
-        args=(
-            queue,
-            fps_queue,
-            close_queue,
-            model_id_or_path,
-            lora_dict,
-            prompt,
-            negative_prompt,
-            frame_buffer_size,
-            width,
-            height,
-            acceleration,
-            use_denoising_batch,
-            seed,
-            cfg_type,
-            guidance_scale,
-            delta,
-            do_add_noise,
-            enable_similar_image_filter,
-            similar_image_filter_threshold,
-            similar_image_filter_max_skip_frame,
-            monitor_receiver,
-            engine_dir,
-            prompt_queue,
-            video_file_path  # 追加
-        ),
+        args=(queue, fps_queue, close_queue, config, prompt_queue, monitor_receiver)
     )
     process1.start()
 
-    monitor_process = ctx.Process(
-        target=monitor_setting_process,
-        args=(
-            width,
-            height,
-            monitor_sender,
-        ),
-    )
+    monitor_process = ctx.Process(target=monitor_setting_process, args=(config["SD_WIDTH"], config["SD_HEIGHT"], monitor_sender))
     monitor_process.start()
     monitor_process.join()
 
     process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
     process2.start()
 
-    # terminate
     process2.join()
-    print("process2 terminated.")
     close_queue.put(True)
-    print("process1 terminating...")
-    process1.join(5)  # with timeout
+    process1.join(5)
     if process1.is_alive():
-        print("process1 still alive. force killing...")
-        process1.terminate()  # force kill...
+        process1.terminate()
     process1.join()
-    print("process1 terminated.")
-
 
 if __name__ == "__main__":
     fire.Fire(main)

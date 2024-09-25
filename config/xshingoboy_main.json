@@ -1,0 +1,20 @@
+{
+  "INSTEP": 50,
+  "T_INDEX_LIST": [10, 35, 40],
+  "IMAGE_MARPBE_RATE": 0.6,
+  "IP_ADAPTER_IMAGE": "assets/xshingoboy-0043.jpg",
+  "VIDEO_PATH": "./assets/mptest.mp4",
+  "SD_WIDTH": 960,
+  "SD_HEIGHT": 540,
+  "UPEER_FPS": 1,
+  "LORA_PATH": "./models/LoRA/xshingoboy.safetensors",
+  "LORA_NAME": "xshingoboy",
+  "PROMPT": "masterpiece, xshingoboy",
+  "MODEL_PATH": "Lykon/dreamshaper-8-lcm",
+  "SAVE_PNG_DIR": "./output_images",
+  "NEGATIVE_PROMPT": "low quality, bad quality, blurry, low resolution",
+  "GUIDANCE_SCALE": 1.4,
+  "DELTA": 0.5,
+  "FRAME_BUFFER_SIZE": 1,
+  "FPS_INTERVAL": 1.0
+}
