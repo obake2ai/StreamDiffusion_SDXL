@@ -291,6 +291,16 @@ def monitor_setting_process(
 def apply_gamma_correction(image_np, gamma=2.2):
     return np.power(image_np, 1.0 / gamma)
 
+def normalize_image(image_np):
+    # Tensorの最小値と最大値を計算
+    min_val = image_np.min()
+    max_val = image_np.max()
+
+    # 全体を[0, 1]にスケーリング（min-max正規化）
+    normalized_image = (image_np - min_val) / (max_val - min_val)
+
+    return normalized_image
+
 base_img = None
 
 
@@ -487,21 +497,21 @@ def image_generation_process(
                     # データをCPUに移動してnumpyに変換
                     output_image_np = output_image.squeeze().cpu().numpy()
 
+                    # 値の範囲を確認
                     print(f"Tensorの値の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
 
+                    # 値を正規化して、[0, 1]の範囲にスケーリング
+                    output_image_np = normalize_image(output_image_np)
 
-                    # ガンマ補正前の確認
-                    # output_imageの範囲が[0, 1]なら、[0, 255]に変換し、uint8にキャスト
-                    if output_image_np.dtype != np.uint8:
-                        output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
+                    # [0, 255]にスケーリングし、uint8にキャスト
+                    output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
 
                     # チャンネルの順序を調整 (C, H, W) -> (H, W, C)
                     if output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB画像の場合
                         output_image_np = np.moveaxis(output_image_np, 0, -1)
 
-                    # ガンマ補正を適用
-                    output_image_np = apply_gamma_correction(output_image_np / 255.0) * 255.0
-                    output_image_np = np.clip(output_image_np, 0, 255).astype(np.uint8)
+                    # 変換後の値の範囲を再確認
+                    print(f"画像データの変換後の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
 
                     # PIL Imageに変換
                     output_pil_image = Image.fromarray(output_image_np)
@@ -510,7 +520,7 @@ def image_generation_process(
                     image_index += 1  # 連番のインデックスを更新
                     output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
                     output_pil_image.save(output_image_path)  # PNG形式で保存
-
+                    
             process_time = time.time() - start_time
             if process_time <= fps_interval:
                 time.sleep(fps_interval - process_time)
