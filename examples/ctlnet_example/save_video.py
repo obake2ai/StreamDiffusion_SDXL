@@ -35,6 +35,8 @@ from PIL import Image
 
 from main_video import StreamDiffusionControlNetSample, close_all_windows, monitor_setting_process, apply_gamma_correction, normalize_image
 
+inputs = []
+
 def read_video(
     event: threading.Event(),
     video_file_path: str,
@@ -44,7 +46,6 @@ def read_video(
     resize_mode: bool = True,
     close_queue: Queue = None,  # 追加
 ):
-    inputs = []
     global inputs
 
     cap = cv2.VideoCapture(video_file_path)
@@ -221,6 +222,7 @@ def image_generation_process(
             sampled_inputs = [inputs.pop() for _ in range(config["FRAME_BUFFER_SIZE"])]
             input_batch = torch.cat(sampled_inputs)
             input = input_batch.to(device=stream.device, dtype=stream.dtype)
+            inputs.clear()
 
             output_images = stream.ctlimg2img(ctlnet_image=input)
             total_frames += len(output_images)
