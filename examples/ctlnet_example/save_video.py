@@ -177,11 +177,11 @@ def read_video(
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached.")
-                # if close_queue:  # 終了を通知
-                #     close_queue.put(True)
-                # break
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
-                continue
+                if close_queue:  # 終了を通知
+                    close_queue.put(True)
+                break
+                # cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
+                # continue
 
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
