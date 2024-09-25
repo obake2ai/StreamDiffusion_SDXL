@@ -29,7 +29,6 @@ from streamdiffusion.image_utils import postprocess_image
 from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
-import psutil
 
 from main_video import StreamDiffusionControlNetSample, close_all_windows
 

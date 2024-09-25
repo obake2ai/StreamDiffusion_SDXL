@@ -30,6 +30,7 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 from datetime import datetime
+import psutil
 
 from stream_info import *
 
