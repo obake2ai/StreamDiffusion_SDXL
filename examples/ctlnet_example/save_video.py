@@ -141,6 +141,7 @@ def image_generation_process(
 
     instep = config["INSTEP"]
     image_index = 0
+    keep_latent = True
     output_dir = create_output_dir(config["VIDEO_PATH"], config["SAVE_PNG_DIR"])
     print(f"Output directory created: {output_dir}")
 
@@ -225,7 +226,7 @@ def image_generation_process(
             input = input_batch.to(device=stream.device, dtype=stream.dtype)
             inputs.clear()
 
-            output_images = stream.ctlimg2img(ctlnet_image=input)
+            output_images = stream.ctlimg2img(ctlnet_image=input, keep_latent=keep_latent)
             total_frames += len(output_images)
             print(f"\rtotal {total_frames}", end='', flush=True)
 
