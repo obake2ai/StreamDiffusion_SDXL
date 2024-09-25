@@ -169,7 +169,7 @@ def image_generation_process(
         config["MODEL_PATH"],
         controlnet=controlnet_pose,
         image_encoder=image_encoder
-    ).to("cuda")
+    ).to(device=torch.device("cuda"), dtype=torch.float16)
 
     pipe.load_lora_weights(config["LORA_PATH"], adapter_name=config["LORA_NAME"])
     pipe.set_adapters([config["LORA_NAME"]], adapter_weights=[1.0])
