@@ -20,3 +20,5 @@ LORA_NAME = "xshingoboy"
 
 PROMPT="masterpiece, xshingoboy"
 MODEL_PATH = "Lykon/dreamshaper-8-lcm"
+
+SAVE_PNG_DIR = 

@@ -293,7 +293,7 @@ def image_generation_process(
     video_file_path: Optional[str] = None,
     use_lcm_lora: bool = True,
     use_tiny_vae: bool = True,
-    output_dir: str = './output_images',  # 画像保存先フォルダの指定
+    output_dir: str = None,  # 画像保存先フォルダの指定
 ) -> None:
     """
     画像生成プロセスの関数
@@ -323,6 +323,7 @@ def image_generation_process(
 
     # フォルダの作成
     if not os.path.exists(output_dir):
+        output_dir = os.path.join(SAVE_PNG_DIR ,os.path.splitext(os.path.basename(video_file_path))[0])
         os.makedirs(output_dir)
 
     # ControlNetモデルの準備
