@@ -36,8 +36,8 @@ def tensor_to_pil(tensor: torch.Tensor) -> Image.Image:
     tensor = tensor.permute(1, 2, 0).numpy()
     return Image.fromarray(tensor)
 
-def load_video_frames(height: int = 512, width: int = 512, video_file_path: str = None):
-    """Capture all frames from the video and store them in the inputs list."""
+def screen(event: threading.Event(), height: int = 512, width: int = 512, video_file_path: str = None):
+    """Capture frames from video and append to the inputs queue."""
     global inputs
 
     cap = cv2.VideoCapture(video_file_path)
@@ -47,6 +47,10 @@ def load_video_frames(height: int = 512, width: int = 512, video_file_path: str 
 
     try:
         while True:
+            if event.is_set():
+                print("Terminating video thread")
+                break
+
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached or frame capture failed.")
@@ -57,9 +61,9 @@ def load_video_frames(height: int = 512, width: int = 512, video_file_path: str 
             inputs.append(pil2tensor(img_resized))
 
             # Debugging: log frame capture and inputs length
-            print(f"Frame captured: {ret}, total frames captured: {len(inputs)}")
+            print(f"Frame captured: {ret}, inputs length: {len(inputs)}")
 
-        print("All frames loaded into inputs.")
+            time.sleep(0.01)  # Adjust frame interval
     finally:
         cap.release()
         close_all_windows()
@@ -79,6 +83,9 @@ def image_generation_process(
     t_index_list: List[int],
 ):
     """Process video frames and save generated images."""
+    event = threading.Event()
+    event.clear()
+
     try:
         # Initialize the ControlNet model and pipeline
         controlnet_pose = ControlNetModel.from_pretrained(
@@ -99,7 +106,7 @@ def image_generation_process(
         pipe.load_lora_weights(LORA_PATH, adapter_name=LORA_NAME)
         pipe.set_adapters([LORA_NAME], adapter_weights=[1.0])
 
-        # Create an instance of StreamDiffusionControlNetSample
+        # Initialize StreamDiffusionControlNetSample
         stream = StreamDiffusionControlNetSample(
             pipe, t_index_list=t_index_list, torch_dtype=torch.float16,
             width=width, height=height, acceleration=acceleration, model_id_or_path=model_id_or_path
@@ -112,45 +119,59 @@ def image_generation_process(
         )
         stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
 
-        # Load all video frames into inputs
-        load_video_frames(height, width, video_file_path)
+        # Start the video reading thread
+        video_thread = threading.Thread(target=screen, args=(event, height, width, video_file_path))
+        video_thread.start()
 
         frame_count = 0
         timestamp = time.strftime("%Y%m%d_%H%M%S")
+        output_folder = f"processed_{timestamp}"
+        os.makedirs(output_folder, exist_ok=True)
 
+        # Check if video saving is enabled
         if save_video:
-            # 保存フォルダの作成
-            output_folder = f"processed_{timestamp}"
+            print("PNG保存モード")
+            input_dir = os.path.dirname(video_file_path)
+            input_filename = os.path.basename(video_file_path)
+            output_folder = os.path.join(input_dir, f"processed_{timestamp}")
             os.makedirs(output_folder, exist_ok=True)
 
-        while inputs:
-            # 先頭のフレームを取り出し、4次元のテンソルに整形
-            input_tensor = inputs.pop(0).unsqueeze(0)  # (C, H, W) -> (1, C, H, W)
+        while True:
+            if event.is_set():
+                break
 
-            # 入力テンソルがfloat32であることを確認
-            input_tensor = input_tensor.to(dtype=torch.float32)
+            if len(inputs) < frame_buffer_size:
+                time.sleep(0.01)
+                continue
 
-            # デバイスへの移行
-            input_tensor = input_tensor.to(device="cuda")
+            # Log inputs status
+            print(f"Processing inputs: {len(inputs)} frames available for processing.")
 
-            # ctlimg2img関数に渡すバッチサイズを指定
-            batch_size = 1
+            # Process frame buffer size
+            input_batch = torch.cat([inputs.pop(0).unsqueeze(0) for _ in range(frame_buffer_size)], dim=0).to(
+                device=pipe.device, dtype=torch.float16
+            )
 
             try:
-                # ctlimg2img関数の呼び出し
-                output_images = stream.ctlimg2img(batch_size=batch_size, ctlnet_image=input_tensor)
+                # Generate images using ctlimg2img
+                output_images = stream.ctlimg2img(ctlnet_image=input_batch)
             except Exception as e:
                 print(f"Error in ctlimg2img: {e}")
                 break
 
+            # Make sure output_images is a list
             output_images = [output_images] if frame_buffer_size == 1 else output_images
 
-            # 保存するかどうかの条件チェック
-            if save_video:
-                for output_image in output_images:
-                    output_image_pil = tensor_to_pil(output_image)
+            # Save each generated image
+            for output_image in output_images:
+                output_image_pil = tensor_to_pil(output_image)
+
+                if save_video:
                     output_image_pil.save(os.path.join(output_folder, f"frame_{frame_count:05d}.png"))
-                    frame_count += 1
+                else:
+                    queue.put(output_image, block=False)
+
+                frame_count += 1
 
             time.sleep(0.01)  # Adjust processing speed as needed
 
@@ -158,6 +179,8 @@ def image_generation_process(
         print(f"Exception occurred during image generation: {e}")
 
     finally:
+        event.set()
+        video_thread.join()
         close_all_windows()
 
 def main(
