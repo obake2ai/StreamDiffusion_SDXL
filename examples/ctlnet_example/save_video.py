@@ -300,7 +300,6 @@ def image_generation_process(
     similar_image_filter_max_skip_frame: float,
     monitor_receiver: Connection,
     engine_dir: Optional[Union[str, Path]],
-    output_dir: str,
     prompt_queue,
     video_file_path: Optional[str] = None,
     use_lcm_lora: bool = True,
@@ -314,6 +313,7 @@ def image_generation_process(
     global box_prompt
     instep = 50
     image_index = 0  # 連番用のカウンタを追加
+    output_dir=None
 
     ######################################################
     # パラメタ
