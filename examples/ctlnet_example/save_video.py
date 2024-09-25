@@ -529,6 +529,7 @@ def image_generation_process(
             fps_queue.put(fps)
         except KeyboardInterrupt:
             break
+    print ("end here")
 
 
 def main(
