@@ -63,7 +63,6 @@ def load_video_frames(height: int = 512, width: int = 512, video_file_path: str 
     finally:
         cap.release()
         close_all_windows()
-
 def image_generation_process(
     queue: Queue,
     model_id_or_path: str,
@@ -99,6 +98,7 @@ def image_generation_process(
         pipe.load_lora_weights(LORA_PATH, adapter_name=LORA_NAME)
         pipe.set_adapters([LORA_NAME], adapter_weights=[1.0])
 
+        # Create an instance of StreamDiffusionControlNetSample
         stream = StreamDiffusionControlNetSample(
             pipe, t_index_list=t_index_list, torch_dtype=torch.float16,
             width=width, height=height, acceleration=acceleration, model_id_or_path=model_id_or_path
@@ -121,11 +121,20 @@ def image_generation_process(
 
         while inputs:
             # 先頭のフレームを取り出し、4次元のテンソルに整形
-            input_tensor = inputs.pop(0).unsqueeze(0)  # [C, H, W] -> [1, C, H, W]
+            input_tensor = inputs.pop(0).unsqueeze(0)  # (C, H, W) -> (1, C, H, W)
+
+            # 入力テンソルがfloat32であることを確認
+            input_tensor = input_tensor.to(dtype=torch.float32)
+
+            # デバイスへの移行
+            input_tensor = input_tensor.to(device="cuda")
+
+            # ctlimg2img関数に渡すバッチサイズを指定
+            batch_size = 1
 
             try:
-                # ctlimg2img関数が4次元テンソルを期待していると仮定して呼び出す
-                output_images = stream.ctlimg2img(ctlnet_image=input_tensor)
+                # ctlimg2img関数の呼び出し
+                output_images = stream.ctlimg2img(batch_size=batch_size, ctlnet_image=input_tensor)
             except Exception as e:
                 print(f"Error in ctlimg2img: {e}")
                 break
@@ -137,7 +146,7 @@ def image_generation_process(
                 output_image_pil.save(os.path.join(output_folder, f"frame_{frame_count:05d}.png"))
                 frame_count += 1
 
-            time.sleep(0.01)  # 処理速度を調整
+            time.sleep(0.01)  # Adjust processing speed as needed
 
     except Exception as e:
         print(f"Exception occurred during image generation: {e}")
