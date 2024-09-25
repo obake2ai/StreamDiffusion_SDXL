@@ -46,6 +46,7 @@ def read_video(
     monitor_info: Dict[str, Any] = None,
     resize_mode: bool = True,
     close_queue: Queue = None,  # 追加
+    total_frames_queue: Queue = None
 ):
     global inputs
 
@@ -57,6 +58,8 @@ def read_video(
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Total frames in video: {total_frames}")
 
+    if total_frames_queue:  # フレーム数をQueueに渡す
+        total_frames_queue.put(total_frames)
 
     cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
     if monitor_info:
@@ -135,7 +138,8 @@ def image_generation_process(
     config: Dict[str, Any],  # 設定をJSONから受け取る
     prompt_queue,
     monitor_receiver: Connection,
-    json_path: str
+    json_path: str,
+    total_frames_queue: Queue
 ) -> None:
     global inputs
     global base_img
@@ -214,6 +218,8 @@ def image_generation_process(
     input_thread.start()
 
     total_frames = 0
+    max_frames = total_frames_queue.get()  # 動画から取得したフレーム数
+    print(f"Processing {max_frames} frames from the video.")
     while True:
         try:
             if not close_queue.empty():
@@ -247,6 +253,10 @@ def image_generation_process(
                     image_index += 1
                     output_pil_image.save(os.path.join(output_dir, f"output_image_{image_index:04d}.png"))
 
+            if total_frames >= max_frames:
+                print(f"Processed all {total_frames} frames. Exiting loop.")
+                break
+
             process_time = time.time() - start_time
             if process_time <= config["FPS_INTERVAL"]:
                 time.sleep(config["FPS_INTERVAL"] - process_time)
@@ -265,11 +275,12 @@ def main(json_config: str):
     fps_queue = ctx.Queue()
     prompt_queue = ctx.Queue()
     close_queue = Queue()
+    total_frames_queue = Queue()
     monitor_sender, monitor_receiver = ctx.Pipe()
 
     process1 = ctx.Process(
         target=image_generation_process,
-        args=(queue, fps_queue, close_queue, config, prompt_queue, monitor_receiver, json_config)
+        args=(queue, fps_queue, close_queue, config, prompt_queue, monitor_receiver, json_config, total_frames_queue)
     )
     process1.start()
 
