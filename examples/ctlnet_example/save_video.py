@@ -318,7 +318,7 @@ def image_generation_process(
     monitor_receiver: Connection,
     engine_dir: Optional[Union[str, Path]],
     prompt_queue,
-    video_file_path: Optional[str] = None,
+    video_file_path: Optional[str] = "./test",
     use_lcm_lora: bool = True,
     use_tiny_vae: bool = True,
     output_dir: str = './output_images',  # 画像保存先フォルダの指定
@@ -478,11 +478,25 @@ def image_generation_process(
             for output_image in output_images:
                 queue.put(output_image, block=False)
 
-                # 画像を保存
-                image_index += 1  # 連番を更新
+                # Convert tensor to a format PIL can handle
+                output_image_np = output_image.squeeze().cpu().numpy()  # Remove extra dimensions if any
+
+                # Normalize and convert to uint8 if necessary
+                if output_image_np.dtype != np.uint8:
+                    output_image_np = (output_image_np * 255).astype(np.uint8)  # Assuming image values are between 0 and 1
+
+                # Check if image has a single channel or multiple channels
+                if output_image_np.ndim == 2:  # Grayscale image
+                    output_pil_image = Image.fromarray(output_image_np, mode='L')
+                elif output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB image with channels first
+                    output_pil_image = Image.fromarray(np.moveaxis(output_image_np, 0, -1))  # Move channels to last dimension
+                else:
+                    raise ValueError(f"Unexpected image format: {output_image_np.shape}")
+
+                # Save the image
+                image_index += 1  # Increment image index
                 output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
-                output_pil_image = Image.fromarray(output_image.cpu().numpy())
-                output_pil_image.save(output_image_path)  # 画像を保存
+                output_pil_image.save(output_image_path)  # Save the image
 
             process_time = time.time() - start_time
             if process_time <= fps_interval:
