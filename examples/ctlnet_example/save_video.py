@@ -422,6 +422,8 @@ def image_generation_process(
     input_thread.start()
     time.sleep(1)
     current_prompt = box_prompt
+    total_frames=0
+
     while True:
         try:
 
@@ -457,38 +459,41 @@ def image_generation_process(
 
             if frame_buffer_size == 1:
                 output_images = [output_images]
+            print("generated", len(output_images))
+            total_frames+=len(output_images)
+            print("total", total_frames)
 
             for output_image in output_images:
                 queue.put(output_image, block=False)
-
-                # output_imageがtorch.Tensor型の場合、変換
-                if isinstance(output_image, torch.Tensor):
-                    # データをCPUに移動してnumpyに変換
-                    output_image_np = output_image.squeeze().cpu().numpy()
-
-                    # 値の範囲を確認
-                    #print(f"Tensorの値の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
-
-                    # 値を正規化して、[0, 1]の範囲にスケーリング
-                    output_image_np = normalize_image(output_image_np)
-
-                    # [0, 255]にスケーリングし、uint8にキャスト
-                    output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
-
-                    # チャンネルの順序を調整 (C, H, W) -> (H, W, C)
-                    if output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB画像の場合
-                        output_image_np = np.moveaxis(output_image_np, 0, -1)
-
-                    # 変換後の値の範囲を再確認
-                    #print(f"画像データの変換後の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
-
-                    # PIL Imageに変換
-                    output_pil_image = Image.fromarray(output_image_np)
-
-                    # 画像を保存
-                    image_index += 1  # 連番のインデックスを更新
-                    output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
-                    output_pil_image.save(output_image_path)  # PNG形式で保存
+                #
+                # # output_imageがtorch.Tensor型の場合、変換
+                # if isinstance(output_image, torch.Tensor):
+                #     # データをCPUに移動してnumpyに変換
+                #     output_image_np = output_image.squeeze().cpu().numpy()
+                #
+                #     # 値の範囲を確認
+                #     #print(f"Tensorの値の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
+                #
+                #     # 値を正規化して、[0, 1]の範囲にスケーリング
+                #     output_image_np = normalize_image(output_image_np)
+                #
+                #     # [0, 255]にスケーリングし、uint8にキャスト
+                #     output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
+                #
+                #     # チャンネルの順序を調整 (C, H, W) -> (H, W, C)
+                #     if output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB画像の場合
+                #         output_image_np = np.moveaxis(output_image_np, 0, -1)
+                #
+                #     # 変換後の値の範囲を再確認
+                #     #print(f"画像データの変換後の範囲: min={output_image_np.min()}, max={output_image_np.max()}")
+                #
+                #     # PIL Imageに変換
+                #     output_pil_image = Image.fromarray(output_image_np)
+                #
+                #     # 画像を保存
+                #     image_index += 1  # 連番のインデックスを更新
+                #     output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
+                #     output_pil_image.save(output_image_path)  # PNG形式で保存
 
             process_time = time.time() - start_time
             if process_time <= fps_interval:
