@@ -1,5 +1,5 @@
 {
-  "INSTEP": 50,
+  "INSTEP": 30,
   "T_INDEX_LIST": [5, 20],
   "IMAGE_MARPBE_RATE": 0.5,
   "IP_ADAPTER_IMAGE": "./assets/xshingoboy-0043.jpg",
