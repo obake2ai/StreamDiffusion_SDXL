@@ -135,6 +135,7 @@ def image_generation_process(
     config: Dict[str, Any],  # 設定をJSONから受け取る
     prompt_queue,
     monitor_receiver: Connection,
+    json_path: str
 ) -> None:
     global inputs
     global base_img
@@ -144,6 +145,8 @@ def image_generation_process(
     keep_latent = True
     output_dir = create_output_dir(config["VIDEO_PATH"], config["SAVE_PNG_DIR"])
     print(f"Output directory created: {output_dir}")
+
+    copy_config_to_output(json_path, output_dir)
 
     t_index_list = config["T_INDEX_LIST"]
     guidance_scale = config["GUIDANCE_SCALE"]
@@ -266,7 +269,7 @@ def main(json_config: str):
 
     process1 = ctx.Process(
         target=image_generation_process,
-        args=(queue, fps_queue, close_queue, config, prompt_queue, monitor_receiver)
+        args=(queue, fps_queue, close_queue, config, prompt_queue, monitor_receiver, json_config)
     )
     process1.start()
 
