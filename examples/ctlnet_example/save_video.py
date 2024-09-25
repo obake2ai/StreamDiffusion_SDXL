@@ -232,7 +232,7 @@ def image_generation_process(
             input = input_batch.to(device=stream.device, dtype=stream.dtype)
             inputs.clear()
 
-            output_images = stream.ctlimg2img(ctlnet_image=input, keep_latent=keep_latent)
+            output_images = stream.ctlimg2img(ctlnet_image=input, keep_latent=keep_latent, target_image_weight=config["IMAGE_MARPBE_RATE"])
             if config["FRAME_BUFFER_SIZE"] == 1:
                 output_images = [output_images]
             total_frames += len(output_images)

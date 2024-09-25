@@ -142,7 +142,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         generator: Optional[torch.Generator] = torch.Generator(),
         seed: int = 2,
         ip_adapter_image=None,
-        target_image_weight: float = IMAGE_MARPBE_RATE,
+        target_image_weight: float = 0.5,
         initial_steps_ratio: float = 0.3,
     ) -> None:
         self.do_classifier_free_guidance = False
@@ -647,7 +647,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
         return x_0_pred_out
 
     @torch.no_grad()
-    def ctlimg2img(self, batch_size: int = 1, ctlnet_image=None, keep_latent=False) -> torch.Tensor:
+    def ctlimg2img(self, batch_size: int = 1, ctlnet_image=None, keep_latent=False, target_image_weight=0.5) -> torch.Tensor:
         if not keep_latent:
             self.input_latent = torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
                 device=self.device, dtype=self.dtype
@@ -685,7 +685,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
 
         if self.ip_adapter and self.added_cond_kwargs and 'image_embeds' in self.added_cond_kwargs:
             image_embeds = self.added_cond_kwargs['image_embeds']
-            image_embeds = image_embeds * self.target_image_weight
+            image_embeds = image_embeds * target_image_weight
             self.added_cond_kwargs['image_embeds'] = image_embeds
         x_0_pred_out = self.predict_x0_batch(self.input_latent, ctlnet_image)
 
