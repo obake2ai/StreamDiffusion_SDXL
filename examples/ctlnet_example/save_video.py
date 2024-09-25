@@ -120,11 +120,12 @@ def image_generation_process(
         os.makedirs(output_folder, exist_ok=True)
 
         while inputs:
-            # Process each frame from inputs list
-            input_batch = torch.cat([inputs.pop(0)])  # Pop the first frame
+            # 先頭のフレームを取り出し、4次元のテンソルに整形
+            input_tensor = inputs.pop(0).unsqueeze(0)  # [C, H, W] -> [1, C, H, W]
 
             try:
-                output_images = stream.ctlimg2img(ctlnet_image=input_batch)
+                # ctlimg2img関数が4次元テンソルを期待していると仮定して呼び出す
+                output_images = stream.ctlimg2img(ctlnet_image=input_tensor)
             except Exception as e:
                 print(f"Error in ctlimg2img: {e}")
                 break
@@ -136,7 +137,7 @@ def image_generation_process(
                 output_image_pil.save(os.path.join(output_folder, f"frame_{frame_count:05d}.png"))
                 frame_count += 1
 
-            time.sleep(0.01)  # Adjust processing speed as needed
+            time.sleep(0.01)  # 処理速度を調整
 
     except Exception as e:
         print(f"Exception occurred during image generation: {e}")
