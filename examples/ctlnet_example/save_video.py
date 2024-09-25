@@ -155,6 +155,10 @@ def read_video(
         print(f"Cannot open video file {video_file_path}")
         return
 
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"Total frames in video: {total_frames}")
+
+
     cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
     if monitor_info:
         monitor_x = monitor_info['left']
@@ -302,7 +306,7 @@ def image_generation_process(
 
     global inputs
     global box_prompt
-    instep = 40
+    instep = 50
     image_index = 0  # 連番用のカウンタを追加
 
     ######################################################
