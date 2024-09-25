@@ -145,7 +145,8 @@ def read_video(
     height: int = 512,
     width: int = 512,
     monitor_info: Dict[str, Any] = None,
-    resize_mode: bool = True,  # New parameter to control resizing
+    resize_mode: bool = True,
+    close_queue: Queue = None,  # 追加
 ):
     global inputs
 
@@ -154,14 +155,11 @@ def read_video(
         print(f"Cannot open video file {video_file_path}")
         return
 
-    # ビデオウィンドウを設定
     cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
     if monitor_info:
-        # ウィンドウを別モニターに移動
         monitor_x = monitor_info['left']
         monitor_y = monitor_info['top']
         cv2.moveWindow("Video Input", monitor_x, monitor_y)
-        # ウィンドウサイズをモニターサイズに合わせる
         cv2.resizeWindow("Video Input", width, height)
 
     try:
@@ -175,17 +173,15 @@ def read_video(
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached.")
-                #cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
+                if close_queue:  # 終了を通知
+                    close_queue.put(True)
                 break
 
-            # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
             if resize_mode:
-                # リサイズモードがTrueの場合、画像を指定サイズにリサイズ
                 img_resized = img.resize((width, height))
             else:
-                # 画像を中央からクロップ
                 img_width, img_height = img.size
                 left_crop = (img_width - width) // 2
                 top_crop = (img_height - height) // 2
@@ -194,7 +190,6 @@ def read_video(
                 img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
                 img_resized = img_cropped
 
-            # フレームを表示（オプション）
             cv2.imshow("Video Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
             if cv2.waitKey(1) == ord('q'):
                 break
@@ -209,9 +204,7 @@ def read_video(
     finally:
         cap.release()
         cv2.destroyWindow("Video Input")
-        close_all_windows()
         print('exit : read_video')
-
 
 def dummy_screen(
         width: int,
@@ -236,38 +229,6 @@ def dummy_screen(
     root.bind("<Configure>", update_geometry)
     root.mainloop()
     return {"top": top, "left": left, "width": width, "height": height}
-
-
-def prompt_window(queue):
-    def on_submit():
-        global box_prompt
-        entered_text = entry.get()
-        print("入力されたテキスト:", entered_text)
-        sv.set(entered_text)
-        queue.put(entered_text)
-
-    # メインウィンドウを作成
-    root = tk.Tk()
-    root.title("入力と送信")
-    root.geometry(f"{600}x{300}")
-    # ラベルを作成
-    label = tk.Label(root, text="prompt")
-    label.pack(pady=10)
-
-    # 入力フィールドを作成
-    de = box_prompt
-    sv = tk.StringVar()
-    entry = tk.Entry(root, textvariable=sv)
-    entry.insert(0, de)
-    entry.pack(pady=10, fill=tk.X)
-
-    # 送信ボタンを作成
-    submit_button = tk.Button(root, text="送信", command=on_submit)
-    submit_button.pack(pady=10)
-
-    # イベントループを開始
-    root.mainloop()
-
 
 def monitor_setting_process(
     width: int,
@@ -457,7 +418,9 @@ def image_generation_process(
     current_prompt = box_prompt
     while True:
         try:
-            if not close_queue.empty():  # closing check
+
+            if not close_queue.empty():  # close_queueに終了信号が来たら停止
+                print("Termination signal received.")
                 break
             if len(inputs) < frame_buffer_size:
                 time.sleep(fps_interval)
@@ -530,7 +493,7 @@ def image_generation_process(
         except KeyboardInterrupt:
             break
         except:
-            print ("end here")
+            print("An error occurred.")
             break
 
 
