@@ -460,7 +460,7 @@ def image_generation_process(
             if frame_buffer_size == 1:
                 output_images = [output_images]
             total_frames+=len(output_images)
-            print(f"total {total_frames}", end='', flush=True))
+            print(f"total {total_frames}", end='', flush=True)
 
             for output_image in output_images:
                 queue.put(output_image, block=False)
