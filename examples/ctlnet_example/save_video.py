@@ -53,18 +53,20 @@ def screen(event: threading.Event(), height: int = 512, width: int = 512, video_
 
             ret, frame = cap.read()
             if not ret:
-                print("End of video file reached.")
+                print("End of video file reached or frame capture failed.")
                 break
 
             img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             img_resized = img.resize((width, height))
             inputs.append(pil2tensor(img_resized))
 
+            # Debugging: log frame capture and inputs length
+            print(f"Frame captured: {ret}, inputs length: {len(inputs)}")
+
             time.sleep(0.01)  # Adjust frame interval
     finally:
         cap.release()
         close_all_windows()
-
 
 def image_generation_process(
     queue: Queue,
@@ -108,7 +110,6 @@ def image_generation_process(
         width=width, height=height, acceleration=acceleration, model_id_or_path=model_id_or_path
     )
 
-
     # Prepare the pipeline for inference
     stream.prepare(
         prompt=prompt, negative_prompt=negative_prompt, num_inference_steps=50,
@@ -134,10 +135,18 @@ def image_generation_process(
                 time.sleep(0.01)
                 continue
 
+            # Debugging: log inputs status
+            print(f"Processing inputs: {len(inputs)} frames available for processing.")
+
             input_batch = torch.cat(inputs[-frame_buffer_size:])
             inputs.clear()
 
-            output_images = stream.ctlimg2img(ctlnet_image=input_batch)
+            try:
+                output_images = stream.ctlimg2img(ctlnet_image=input_batch)
+            except Exception as e:
+                print(f"Error in ctlimg2img: {e}")
+                break
+
             output_images = [output_images] if frame_buffer_size == 1 else output_images
 
             for output_image in output_images:
