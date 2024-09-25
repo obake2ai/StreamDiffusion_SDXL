@@ -1,7 +1,7 @@
 {
   "INSTEP": 50,
-  "T_INDEX_LIST": [20, 45],
-  "IMAGE_MARPBE_RATE": 0.4,
+  "T_INDEX_LIST": [5, 20],
+  "IMAGE_MARPBE_RATE": 0.5,
   "IP_ADAPTER_IMAGE": "./assets/xshingoboy-0043.jpg",
   "VIDEO_PATH": "./assets/mptest.mp4",
   "SD_WIDTH": 960,
