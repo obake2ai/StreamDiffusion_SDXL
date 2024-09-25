@@ -795,6 +795,7 @@ def camera(
         cv2.destroyWindow("Camera Input")
         print('exit : camera')
 
+
 def read_video(
     event: threading.Event(),
     video_file_path: str,
@@ -802,6 +803,7 @@ def read_video(
     width: int = 512,
     monitor_info: Dict[str, Any] = None,
     resize_mode: bool = True,
+    close_queue: Queue = None,  # 追加
 ):
     global inputs
 
@@ -810,7 +812,10 @@ def read_video(
         print(f"Cannot open video file {video_file_path}")
         return
 
-    # ビデオウィンドウを設定
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"Total frames in video: {total_frames}")
+
+
     cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
     if monitor_info:
         monitor_x = monitor_info['left']
@@ -829,9 +834,12 @@ def read_video(
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached.")
+                if close_queue:  # 終了を通知
+                    close_queue.put(True)
                 break
+                # cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
+                # continue
 
-            # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
             if resize_mode:
@@ -845,10 +853,8 @@ def read_video(
                 img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
                 img_resized = img_cropped
 
-            # フレームを表示（オプション）
             cv2.imshow("Video Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
             if cv2.waitKey(1) == ord('q'):
-                event.set()  # 終了のフラグをセットして終了
                 break
 
             inputs.append(pil2tensor(img_resized))
@@ -862,9 +868,20 @@ def read_video(
         cap.release()
         cv2.destroyWindow("Video Input")
         print('exit : read_video')
-        close_all_windows()
-        os._exit(0)
 
+
+def apply_gamma_correction(image_np, gamma=2.2):
+    return np.power(image_np, 1.0 / gamma)
+
+def normalize_image(image_np):
+    # Tensorの最小値と最大値を計算
+    min_val = image_np.min()
+    max_val = image_np.max()
+
+    # 全体を[0, 1]にスケーリング（min-max正規化）
+    normalized_image = (image_np - min_val) / (max_val - min_val)
+
+    return normalized_image
 
 def dummy_screen(
         width: int,
