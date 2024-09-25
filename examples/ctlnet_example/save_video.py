@@ -42,7 +42,7 @@ def screen(event: threading.Event(), height: int = 512, width: int = 512, video_
 
     cap = cv2.VideoCapture(video_file_path)
     if not cap.isOpened():
-        print(f"Cannot open video file {video_file_path}")
+        print(f"Failed to open video file: {video_file_path}")
         return
 
     try:
@@ -86,48 +86,48 @@ def image_generation_process(
     event = threading.Event()
     event.clear()
 
-    # Initialize the ControlNet model and pipeline
-    controlnet_pose = ControlNetModel.from_pretrained(
-        "lllyasviel/control_v11p_sd15_openpose", torch_dtype=torch.float16).to("cuda")
+    try:
+        # Initialize the ControlNet model and pipeline
+        controlnet_pose = ControlNetModel.from_pretrained(
+            "lllyasviel/control_v11p_sd15_openpose", torch_dtype=torch.float16).to("cuda")
 
-    # IPAdapter's image encoder
-    image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-        "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=torch.float16).to("cuda")
+        # IPAdapter's image encoder
+        image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+            "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=torch.float16).to("cuda")
 
-    # Load the Stable Diffusion ControlNet pipeline
-    pipe = StableDiffusionControlNetPipeline.from_pretrained(
-        model_id_or_path, controlnet=controlnet_pose, image_encoder=image_encoder).to("cuda", torch.float16)
+        # Load the Stable Diffusion ControlNet pipeline
+        pipe = StableDiffusionControlNetPipeline.from_pretrained(
+            model_id_or_path, controlnet=controlnet_pose, image_encoder=image_encoder).to("cuda", torch.float16)
 
-    # Load LoRA and configure pipeline
-    pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models", weight_name="ip-adapter_sd15.bin", torch_dtype=torch.float16)
-    pipe.set_ip_adapter_scale(0.8)
+        # Load LoRA and configure pipeline
+        pipe.load_ip_adapter('h94/IP-Adapter', subfolder="models", weight_name="ip-adapter_sd15.bin", torch_dtype=torch.float16)
+        pipe.set_ip_adapter_scale(0.8)
 
-    pipe.load_lora_weights(LORA_PATH, adapter_name=LORA_NAME)
-    pipe.set_adapters([LORA_NAME], adapter_weights=[1.0])
+        pipe.load_lora_weights(LORA_PATH, adapter_name=LORA_NAME)
+        pipe.set_adapters([LORA_NAME], adapter_weights=[1.0])
 
-    stream = StreamDiffusionControlNetSample(
-        pipe, t_index_list=t_index_list, torch_dtype=torch.float16,
-        width=width, height=height, acceleration=acceleration, model_id_or_path=model_id_or_path
-    )
+        stream = StreamDiffusionControlNetSample(
+            pipe, t_index_list=t_index_list, torch_dtype=torch.float16,
+            width=width, height=height, acceleration=acceleration, model_id_or_path=model_id_or_path
+        )
 
-    # Prepare the pipeline for inference
-    stream.prepare(
-        prompt=prompt, negative_prompt=negative_prompt, num_inference_steps=50,
-        guidance_scale=1.2, delta=1.0
-    )
-    stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
+        # Prepare the pipeline for inference
+        stream.prepare(
+            prompt=prompt, negative_prompt=negative_prompt, num_inference_steps=50,
+            guidance_scale=1.2, delta=1.0
+        )
+        stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
 
-    # Start the video reading thread
-    video_thread = threading.Thread(target=screen, args=(event, height, width, video_file_path))
-    video_thread.start()
+        # Start the video reading thread
+        video_thread = threading.Thread(target=screen, args=(event, height, width, video_file_path))
+        video_thread.start()
 
-    frame_count = 0
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    output_folder = f"processed_{timestamp}"
-    os.makedirs(output_folder, exist_ok=True)
+        frame_count = 0
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        output_folder = f"processed_{timestamp}"
+        os.makedirs(output_folder, exist_ok=True)
 
-    while True:
-        try:
+        while True:
             if event.is_set():
                 break
 
@@ -156,15 +156,13 @@ def image_generation_process(
 
             time.sleep(0.01)  # Adjust processing speed as needed
 
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            print(f"Error: {e}")
-        finally:
-            event.set()
-            video_thread.join()
-            close_all_windows()
-            break
+    except Exception as e:
+        print(f"Exception occurred during image generation: {e}")
+
+    finally:
+        event.set()
+        video_thread.join()
+        close_all_windows()
 
 def main(
     model_id_or_path: str = MODEL_PATH,
