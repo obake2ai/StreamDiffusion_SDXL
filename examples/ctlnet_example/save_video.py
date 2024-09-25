@@ -63,6 +63,7 @@ def load_video_frames(height: int = 512, width: int = 512, video_file_path: str 
     finally:
         cap.release()
         close_all_windows()
+
 def image_generation_process(
     queue: Queue,
     model_id_or_path: str,
@@ -116,8 +117,11 @@ def image_generation_process(
 
         frame_count = 0
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        output_folder = f"processed_{timestamp}"
-        os.makedirs(output_folder, exist_ok=True)
+
+        if save_video:
+            # 保存フォルダの作成
+            output_folder = f"processed_{timestamp}"
+            os.makedirs(output_folder, exist_ok=True)
 
         while inputs:
             # 先頭のフレームを取り出し、4次元のテンソルに整形
@@ -141,10 +145,12 @@ def image_generation_process(
 
             output_images = [output_images] if frame_buffer_size == 1 else output_images
 
-            for output_image in output_images:
-                output_image_pil = tensor_to_pil(output_image)
-                output_image_pil.save(os.path.join(output_folder, f"frame_{frame_count:05d}.png"))
-                frame_count += 1
+            # 保存するかどうかの条件チェック
+            if save_video:
+                for output_image in output_images:
+                    output_image_pil = tensor_to_pil(output_image)
+                    output_image_pil.save(os.path.join(output_folder, f"frame_{frame_count:05d}.png"))
+                    frame_count += 1
 
             time.sleep(0.01)  # Adjust processing speed as needed
 
