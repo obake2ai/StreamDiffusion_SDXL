@@ -1,6 +1,6 @@
 {
-  "INSTEP": 50,
-  "T_INDEX_LIST": [10, 30, 40],
+  "INSTEP": 20,
+  "T_INDEX_LIST": [10, 15],
   "IMAGE_MARPBE_RATE": 0.3,
   "IP_ADAPTER_IMAGE": "./assets/xshingoboy-0043.jpg",
   "VIDEO_PATH": "./assets/mptest.mp4",
