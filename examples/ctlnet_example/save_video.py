@@ -779,8 +779,8 @@ def read_video(
 
             ret, frame = cap.read()
             if not ret:
-                print("End of video file reached. Restarting video.")
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
+                print("End of video file reached.")
+                #cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
                 continue
 
             # フレームをPIL Imageに変換
@@ -1132,13 +1132,13 @@ def main(
     do_add_noise = False
     monitor_sender, monitor_receiver = ctx.Pipe()
 
-    prompt_process = ctx.Process(
-        target=prompt_window,
-        args=(
-            prompt_queue,
-        ),
-    )
-    prompt_process.start()
+    # prompt_process = ctx.Process(
+    #     target=prompt_window,
+    #     args=(
+    #         prompt_queue,
+    #     ),
+    # )
+    # prompt_process.start()
 
     process1 = ctx.Process(
         target=image_generation_process,
