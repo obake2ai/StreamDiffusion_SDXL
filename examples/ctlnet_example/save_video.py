@@ -32,18 +32,13 @@ from PIL import Image
 
 from main_video import StreamDiffusionControlNetSample, close_all_windows
 
+from stream_info import *
+
 ###############################################
 # プロンプトはここ
 ###############################################
-box_prompt = "xshingogirl"
+box_prompt = PROMPT
 ###############################################
-
-UPEER_FPS = 1
-fps_interval = 1.0 / UPEER_FPS
-inputs = []
-top = 0
-left = 0
-
 
 def screen(
     event: threading.Event(),
@@ -313,7 +308,7 @@ def image_generation_process(
     # パラメタ
     ######################################################
     adapter = True
-    ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
+    ip_adapter_image_filepath = IP_ADAPTER_IMAGE
 
     t_index_list = [0, 17, 35]
     cfg_type = "none"
@@ -359,8 +354,8 @@ def image_generation_process(
                              torch_dtype=torch.float16)
         pipe.set_ip_adapter_scale(0.8)
 
-    pipe.load_lora_weights("./models/LoRA/xshingogirl.safetensors", adapter_name="xshingogirl")
-    pipe.set_adapters(["xshingogirl"], adapter_weights=[1.0])
+    pipe.load_lora_weights(LORA_PATH, adapter_name=LORA_NAME)
+    pipe.set_adapters([LORA_NAME], adapter_weights=[1.0])
 
     # Diffusers pipelineをStreamDiffusionにラップ
     stream = StreamDiffusionControlNetSample(
@@ -508,13 +503,13 @@ def image_generation_process(
 
 
 def main(
-    model_id_or_path: str = "Lykon/dreamshaper-8-lcm",
-    lora_dict: Optional[Dict[str, float]] = {"./models/LoRA/xshingogirl.safetensors": 0.9},
-    prompt: str = "xshingogirl",
+    model_id_or_path: str = MODEL_PATH,
+    lora_dict: Optional[Dict[str, float]] = {LORA_PATH: 1.0},
+    prompt: str = PROMPT,
     negative_prompt: str = "low quality, bad quality, blurry, low resolution",
     frame_buffer_size: int = 1,
-    width: int = 960,
-    height: int = 540,
+    width: int = SD_WIDTH,
+    height: int = SD_HEIGHT,
     acceleration: Literal["none", "xformers", "tensorrt"] = "none",
     use_denoising_batch: bool = True,
     seed: int = 2,
@@ -526,7 +521,7 @@ def main(
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
-    video_file_path: Optional[str] = "./assets/mptest.mp4",
+    video_file_path: Optional[str] = VIDEO_PATH,
 ) -> None:
     """
     メイン関数

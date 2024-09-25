@@ -7,9 +7,9 @@ IP_ADAPTER_IMAGE = "assets/xshingoboy-0043.jpg"
 VIDEO_PATH = "./assets/mptest.mp4"
 
 SD_WIDTH = 960
-SD_HEIGHT = 536
+SD_HEIGHT = 540
 
-UPEER_FPS = 100
+UPEER_FPS = 1
 fps_interval = 1.0/UPEER_FPS
 inputs = []
 top = 0
