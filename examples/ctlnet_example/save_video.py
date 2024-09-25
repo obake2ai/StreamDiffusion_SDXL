@@ -333,7 +333,7 @@ def image_generation_process(
     ######################################################
 
     # フォルダの作成
-    if not os.path.exists(output_dir):
+    if not output_dir:
         output_dir = create_output_dir(video_file_path)
         print(f"Output directory created: {output_dir}")
 
