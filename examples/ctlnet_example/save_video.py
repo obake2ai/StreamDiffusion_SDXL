@@ -135,10 +135,13 @@ def image_generation_process(
     config: Dict[str, Any],  # 設定をJSONから受け取る
     prompt_queue,
     monitor_receiver: Connection,
-    json_path: str
+    json_path: str,
+    gpu_id: int
 ) -> None:
     global inputs
     global base_img
+
+    torch.cuda.set_device(gpu_id)
 
     instep = config["INSTEP"]
     image_index = 0
@@ -258,7 +261,7 @@ def image_generation_process(
             traceback.print_exc()
             break
 
-def main(json_config: str):
+def main(json_config: str, gpu_id: int = 0):
     config = load_config_from_json(json_config)
     ctx = get_context('spawn')
     queue = ctx.Queue()
@@ -269,7 +272,7 @@ def main(json_config: str):
 
     process1 = ctx.Process(
         target=image_generation_process,
-        args=(queue, fps_queue, close_queue, config, prompt_queue, monitor_receiver, json_config)
+        args=(queue, fps_queue, close_queue, config, prompt_queue, monitor_receiver, json_config, gpu_id)
     )
     process1.start()
 
