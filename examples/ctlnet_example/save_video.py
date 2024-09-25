@@ -33,11 +33,81 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 
-from main_video import StreamDiffusionControlNetSample, close_all_windows, monitor_setting_process, read_video, apply_gamma_correction, normalize_image
+from main_video import StreamDiffusionControlNetSample, close_all_windows, monitor_setting_process, apply_gamma_correction, normalize_image
 
-###############################################
-# JSONから設定を読み込む関数
-###############################################
+def read_video(
+    event: threading.Event(),
+    video_file_path: str,
+    height: int = 512,
+    width: int = 512,
+    monitor_info: Dict[str, Any] = None,
+    resize_mode: bool = True,
+    close_queue: Queue = None,  # 追加
+):
+    global inputs
+
+    cap = cv2.VideoCapture(video_file_path)
+    if not cap.isOpened():
+        print(f"Cannot open video file {video_file_path}")
+        return
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"Total frames in video: {total_frames}")
+
+
+    cv2.namedWindow("Video Input", cv2.WINDOW_NORMAL)
+    if monitor_info:
+        monitor_x = monitor_info['left']
+        monitor_y = monitor_info['top']
+        cv2.moveWindow("Video Input", monitor_x, monitor_y)
+        cv2.resizeWindow("Video Input", width, height)
+
+    try:
+        while True:
+            if event.is_set():
+                print("terminate video thread")
+                break
+
+            start_time = time.time()
+
+            ret, frame = cap.read()
+            if not ret:
+                print("End of video file reached.")
+                if close_queue:  # 終了を通知
+                    close_queue.put(True)
+                break
+                # cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
+                # continue
+
+            img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+            if resize_mode:
+                img_resized = img.resize((width, height))
+            else:
+                img_width, img_height = img.size
+                left_crop = (img_width - width) // 2
+                top_crop = (img_height - height) // 2
+                right_crop = left_crop + width
+                bottom_crop = top_crop + height
+                img_cropped = img.crop((left_crop, top_crop, right_crop, bottom_crop))
+                img_resized = img_cropped
+
+            cv2.imshow("Video Input", cv2.cvtColor(np.array(img_resized), cv2.COLOR_RGB2BGR))
+            if cv2.waitKey(1) == ord('q'):
+                break
+
+            inputs.append(pil2tensor(img_resized))
+
+            interval = time.time() - start_time
+            fps_interval = 1.0 / UPEER_FPS
+            if interval < fps_interval:
+                sleep_time = fps_interval - interval
+                time.sleep(sleep_time)
+    finally:
+        cap.release()
+        cv2.destroyWindow("Video Input")
+        print('exit : read_video')
+
 def load_config_from_json(json_path: str) -> Dict[str, Any]:
     with open(json_path, 'r') as file:
         return json.load(file)
