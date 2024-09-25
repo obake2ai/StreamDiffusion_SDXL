@@ -38,7 +38,7 @@ from main_video import StreamDiffusionControlNetSample, close_all_windows
 box_prompt = "xshingogirl"
 ###############################################
 
-UPEER_FPS = 2
+UPEER_FPS = 1
 fps_interval = 1.0 / UPEER_FPS
 inputs = []
 top = 0
@@ -460,11 +460,11 @@ def image_generation_process(
             if frame_buffer_size == 1:
                 output_images = [output_images]
             total_frames+=len(output_images)
-            print(f"total {total_frames}", end='', flush=True)
+            print(f"\rtotal {total_frames}", end='', flush=True)
 
             for output_image in output_images:
                 queue.put(output_image, block=False)
-                
+
                 # output_imageがtorch.Tensor型の場合、変換
                 if isinstance(output_image, torch.Tensor):
                     # データをCPUに移動してnumpyに変換
