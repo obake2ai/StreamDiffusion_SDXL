@@ -1,0 +1,20 @@
+{
+  "INSTEP": 50,
+  "T_INDEX_LIST": [10, 35, 40],
+  "IMAGE_MARPBE_RATE": 1.0,
+  "IP_ADAPTER_IMAGE": "./assets/xshingogirl-0015.jpg",
+  "VIDEO_PATH": "./assets/mptest.mp4",
+  "SD_WIDTH": 960,
+  "SD_HEIGHT": 540,
+  "UPPER_FPS": 1,
+  "LORA_PATH": "./models/LoRA/xshingogirl.safetensors",
+  "LORA_NAME": "xshingogirl",
+  "PROMPT": "masterpiece, xshingogirl",
+  "MODEL_PATH": "Lykon/dreamshaper-8-lcm",
+  "SAVE_PNG_DIR": "./output_images",
+  "NEGATIVE_PROMPT": "low quality, bad quality, blurry, low resolution",
+  "GUIDANCE_SCALE": 1.2,
+  "DELTA": 1.0,
+  "FRAME_BUFFER_SIZE": 1,
+  "FPS_INTERVAL": 1.0
+}
