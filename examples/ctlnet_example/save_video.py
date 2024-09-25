@@ -36,8 +36,8 @@ def tensor_to_pil(tensor: torch.Tensor) -> Image.Image:
     tensor = tensor.permute(1, 2, 0).numpy()
     return Image.fromarray(tensor)
 
-def screen(event: threading.Event(), height: int = 512, width: int = 512, video_file_path: str = None):
-    """Capture frames from video and append to the inputs queue."""
+def load_video_frames(height: int = 512, width: int = 512, video_file_path: str = None):
+    """Capture all frames from the video and store them in the inputs list."""
     global inputs
 
     cap = cv2.VideoCapture(video_file_path)
@@ -47,10 +47,6 @@ def screen(event: threading.Event(), height: int = 512, width: int = 512, video_
 
     try:
         while True:
-            if event.is_set():
-                print("Terminating video thread")
-                break
-
             ret, frame = cap.read()
             if not ret:
                 print("End of video file reached or frame capture failed.")
@@ -61,9 +57,9 @@ def screen(event: threading.Event(), height: int = 512, width: int = 512, video_
             inputs.append(pil2tensor(img_resized))
 
             # Debugging: log frame capture and inputs length
-            print(f"Frame captured: {ret}, inputs length: {len(inputs)}")
+            print(f"Frame captured: {ret}, total frames captured: {len(inputs)}")
 
-            time.sleep(0.01)  # Adjust frame interval
+        print("All frames loaded into inputs.")
     finally:
         cap.release()
         close_all_windows()
@@ -83,9 +79,6 @@ def image_generation_process(
     t_index_list: List[int],
 ):
     """Process video frames and save generated images."""
-    event = threading.Event()
-    event.clear()
-
     try:
         # Initialize the ControlNet model and pipeline
         controlnet_pose = ControlNetModel.from_pretrained(
@@ -118,28 +111,17 @@ def image_generation_process(
         )
         stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
 
-        # Start the video reading thread
-        video_thread = threading.Thread(target=screen, args=(event, height, width, video_file_path))
-        video_thread.start()
+        # Load all video frames into inputs
+        load_video_frames(height, width, video_file_path)
 
         frame_count = 0
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         output_folder = f"processed_{timestamp}"
         os.makedirs(output_folder, exist_ok=True)
 
-        while True:
-            if event.is_set():
-                break
-
-            if len(inputs) < frame_buffer_size:
-                time.sleep(0.01)
-                continue
-
-            # Debugging: log inputs status
-            print(f"Processing inputs: {len(inputs)} frames available for processing.")
-
-            input_batch = torch.cat(inputs[-frame_buffer_size:])
-            inputs.clear()
+        while inputs:
+            # Process each frame from inputs list
+            input_batch = torch.cat([inputs.pop(0)])  # Pop the first frame
 
             try:
                 output_images = stream.ctlimg2img(ctlnet_image=input_batch)
@@ -160,8 +142,6 @@ def image_generation_process(
         print(f"Exception occurred during image generation: {e}")
 
     finally:
-        event.set()
-        video_thread.join()
         close_all_windows()
 
 def main(
