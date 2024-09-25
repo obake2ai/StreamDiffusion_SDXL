@@ -33,7 +33,7 @@ from my_image_utils import pil2tensor
 from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 
-from main_video import StreamDiffusionControlNetSample, close_all_windows, monitor_setting_process, read_video
+from main_video import StreamDiffusionControlNetSample, close_all_windows, monitor_setting_process, read_video, apply_gamma_correction, normalize_image
 
 ###############################################
 # JSONから設定を読み込む関数
