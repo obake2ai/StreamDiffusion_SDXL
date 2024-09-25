@@ -934,7 +934,7 @@ def image_generation_process(
     # パラメタ
     ######################################################
     adapter = True
-    ip_adapter_image_filepath = "./assets/xshingogirl-0015.jpg"
+    ip_adapter_image_filepath = "assets/xshingoboy-0043.jpg"
 
     t_index_list = [0, 17, 35]
     cfg_type = "none"
