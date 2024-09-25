@@ -290,6 +290,9 @@ def monitor_setting_process(
 
 base_img = None
 
+import os
+from PIL import Image  # PILを使って画像を保存
+import torch
 
 def image_generation_process(
     queue: Queue,
@@ -318,6 +321,7 @@ def image_generation_process(
     video_file_path: Optional[str] = None,
     use_lcm_lora: bool = True,
     use_tiny_vae: bool = True,
+    output_dir: str = './output_images',  # 画像保存先フォルダの指定
 ) -> None:
     """
     画像生成プロセスの関数
@@ -326,6 +330,8 @@ def image_generation_process(
     global inputs
     global box_prompt
     instep = 40
+    image_index = 0  # 連番用のカウンタを追加
+
     ######################################################
     # パラメタ
     ######################################################
@@ -342,6 +348,10 @@ def image_generation_process(
     # fullで有効
     negative_prompt = """(deformed:1.3),(malformed hands:1.4),(poorly drawn hands:1.4),(mutated fingers:1.4),(bad anatomy:1.3),(extra limbs:1.35),(poorly drawn face:1.4),(signature:1.2),(artist name:1.2),(watermark:1.2),(worst quality, low quality, normal quality:1.4), lowres,skin blemishes,extra fingers,fewer fingers,strange fingers,Hand grip,(lean),Strange eyes,(three arms),(Many arms),(watermarking)"""
     ######################################################
+
+    # フォルダの作成
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # ControlNetモデルの準備
     controlnet_pose = ControlNetModel.from_pretrained(
@@ -385,23 +395,12 @@ def image_generation_process(
         model_id_or_path=model_id_or_path,
     )
 
-    # LoRAの読み込み
-    # pipe.load_lora_weights("./models/LoRA/xshingoboy.safetensors", adapter_name="xshingoboy")
-    # pipe.set_adapters(["xshingoboy"], adapter_weights=[1.0])
-    pipe.load_lora_weights("./models/LoRA/xshingogirl.safetensors", adapter_name="xshingogirl")
-    pipe.set_adapters(["xshingogirl"], adapter_weights=[1.0])
-    # pipe.load_lora_weights("./models/LoRA/xshingositu.safetensors", adapter_name="xshingositu")
-    # pipe.set_adapters(["xshingositu"], adapter_weights=[1.0])
-    # pipe.load_lora_weights("latent-consistency/lcm-lora-sdv1-5", adapter_name="lcm") #Stable  Diffusion 1.5 のLCM LoRA
-    # pipe.set_adapters(["lcm"], adapter_weights=[1.0])
-
     # Tiny VAEで高速化
     stream.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd").to(device=pipe.device, dtype=pipe.dtype)
 
     ip_adapter_image = None
     if adapter:
         print("prepare ip adapter")
-        # 初期画像の準備
         ip_adapter_image = load_image(ip_adapter_image_filepath)
 
     stream.prepare(
@@ -425,7 +424,6 @@ def image_generation_process(
             input_source = 'screen'
 
     monitor_list = monitor_receiver.recv()
-    # 使用するモニターの情報を取得（ここでは2番目のモニターを使用）
     if len(monitor_list) > 1:
         monitor_info = monitor_list[1]  # 2番目のモニター
     else:
@@ -479,6 +477,13 @@ def image_generation_process(
                 output_images = [output_images]
             for output_image in output_images:
                 queue.put(output_image, block=False)
+
+                # 画像を保存
+                image_index += 1  # 連番を更新
+                output_image_path = os.path.join(output_dir, f"output_image_{image_index:04d}.png")
+                output_pil_image = Image.fromarray(output_image.cpu().numpy())
+                output_pil_image.save(output_image_path)  # 画像を保存
+
             process_time = time.time() - start_time
             if process_time <= fps_interval:
                 time.sleep(fps_interval - process_time)
@@ -487,11 +492,6 @@ def image_generation_process(
             fps_queue.put(fps)
         except KeyboardInterrupt:
             break
-
-    print("closing image_generation_process...")
-    event.set()  # stop capture thread
-    input_thread.join()
-    print(f"fps: {fps}")
 
 
 def main(
