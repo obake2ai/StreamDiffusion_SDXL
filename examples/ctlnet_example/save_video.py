@@ -781,7 +781,7 @@ def read_video(
             if not ret:
                 print("End of video file reached.")
                 #cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
-                continue
+                break
 
             # フレームをPIL Imageに変換
             img = PIL.Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
