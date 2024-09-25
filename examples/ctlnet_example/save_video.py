@@ -31,7 +31,7 @@ from transformers import CLIPVisionModelWithProjection
 from PIL import Image
 
 from main_video import StreamDiffusionControlNetSample, close_all_windows
-
+from datetime import datetime
 from stream_info import *
 
 ###############################################
@@ -39,6 +39,17 @@ from stream_info import *
 ###############################################
 box_prompt = PROMPT
 ###############################################
+
+def create_output_dir(video_file_path: str, save_dir: str = SAVE_PNG_DIR) -> str:
+    # 現在の日時を取得し、フォーマット
+    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    base_name = os.path.splitext(os.path.basename(video_file_path))[0]
+    output_dir = os.path.join(save_dir, base_name, current_time)
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    return output_dir
 
 def screen(
     event: threading.Event(),
@@ -289,11 +300,11 @@ def image_generation_process(
     similar_image_filter_max_skip_frame: float,
     monitor_receiver: Connection,
     engine_dir: Optional[Union[str, Path]],
+    output_dir: str,
     prompt_queue,
     video_file_path: Optional[str] = None,
     use_lcm_lora: bool = True,
-    use_tiny_vae: bool = True,
-    output_dir: str = None,  # 画像保存先フォルダの指定
+    use_tiny_vae: bool = True,  # 画像保存先フォルダの指定
 ) -> None:
     """
     画像生成プロセスの関数
@@ -323,8 +334,8 @@ def image_generation_process(
 
     # フォルダの作成
     if not os.path.exists(output_dir):
-        output_dir = os.path.join(SAVE_PNG_DIR ,os.path.splitext(os.path.basename(video_file_path))[0])
-        os.makedirs(output_dir)
+        output_dir = create_output_dir(video_file_path)
+        print(f"Output directory created: {output_dir}")
 
     # ControlNetモデルの準備
     controlnet_pose = ControlNetModel.from_pretrained(
