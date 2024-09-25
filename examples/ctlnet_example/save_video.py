@@ -44,6 +44,7 @@ def read_video(
     resize_mode: bool = True,
     close_queue: Queue = None,  # 追加
 ):
+    inputs = []
     global inputs
 
     cap = cv2.VideoCapture(video_file_path)
