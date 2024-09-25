@@ -42,6 +42,7 @@ def read_video(
     video_file_path: str,
     height: int = 512,
     width: int = 512,
+    upper_fps: int = 1,
     monitor_info: Dict[str, Any] = None,
     resize_mode: bool = True,
     close_queue: Queue = None,  # 追加
@@ -101,7 +102,7 @@ def read_video(
             inputs.append(pil2tensor(img_resized))
 
             interval = time.time() - start_time
-            fps_interval = 1.0 / UPEER_FPS
+            fps_interval = 1.0 / upper_fps
             if interval < fps_interval:
                 sleep_time = fps_interval - interval
                 time.sleep(sleep_time)
@@ -205,7 +206,7 @@ def image_generation_process(
     monitor_list = monitor_receiver.recv()
     monitor_info = monitor_list[0]
 
-    input_thread = threading.Thread(target=read_video, args=(event, config["VIDEO_PATH"], config["SD_HEIGHT"], config["SD_WIDTH"], monitor_info))
+    input_thread = threading.Thread(target=read_video, args=(event, config["VIDEO_PATH"], config["SD_HEIGHT"], config["SD_WIDTH"], config["UPPER_FPS"], monitor_info))
     input_thread.start()
 
     total_frames = 0

@@ -6,7 +6,7 @@
   "VIDEO_PATH": "./assets/mptest.mp4",
   "SD_WIDTH": 960,
   "SD_HEIGHT": 540,
-  "UPEER_FPS": 1,
+  "UPPER_FPS": 1,
   "LORA_PATH": "./models/LoRA/xshingoboy.safetensors",
   "LORA_NAME": "xshingoboy",
   "PROMPT": "masterpiece, xshingoboy",
