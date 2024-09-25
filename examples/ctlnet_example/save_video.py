@@ -288,11 +288,11 @@ def monitor_setting_process(
     monitor_sender.send(monitor_list)
 
 
+def apply_gamma_correction(image_np, gamma=2.2):
+    return np.power(image_np, 1.0 / gamma)
+
 base_img = None
 
-import os
-from PIL import Image  # PILを使って画像を保存
-import torch
 
 def image_generation_process(
     queue: Queue,
@@ -487,14 +487,18 @@ def image_generation_process(
                     # データをCPUに移動してnumpyに変換
                     output_image_np = output_image.squeeze().cpu().numpy()
 
+                    # ガンマ補正前の確認
                     # output_imageの範囲が[0, 1]なら、[0, 255]に変換し、uint8にキャスト
                     if output_image_np.dtype != np.uint8:
                         output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
 
-                    # プレビュー画面で表示している画像と同じようにチャンネル順を調整
-                    # チャンネルが最初 (C, H, W) の場合は、(H, W, C)に変換
+                    # チャンネルの順序を調整 (C, H, W) -> (H, W, C)
                     if output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB画像の場合
                         output_image_np = np.moveaxis(output_image_np, 0, -1)
+
+                    # ガンマ補正を適用
+                    output_image_np = apply_gamma_correction(output_image_np / 255.0) * 255.0
+                    output_image_np = np.clip(output_image_np, 0, 255).astype(np.uint8)
 
                     # PIL Imageに変換
                     output_pil_image = Image.fromarray(output_image_np)
