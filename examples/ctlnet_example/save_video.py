@@ -232,9 +232,11 @@ def image_generation_process(
             for output_image in output_images:
                 queue.put(output_image, block=False)
                 if isinstance(output_image, torch.Tensor):
-                    output_image_np = normalize_image(output_image.squeeze().cpu().numpy())
+                    output_image_np = output_image.squeeze().cpu().numpy()
+                    output_image_np = normalize_image(output_image_np)
                     output_image_np = np.clip(output_image_np * 255, 0, 255).astype(np.uint8)
-                    output_image_np = np.moveaxis(output_image_np, 0, -1)
+                    if output_image_np.ndim == 3 and output_image_np.shape[0] == 3:  # RGB画像の場合
+                        output_image_np = np.moveaxis(output_image_np, 0, -1)
                     output_pil_image = Image.fromarray(output_image_np)
                     image_index += 1
                     output_pil_image.save(os.path.join(output_dir, f"output_image_{image_index:04d}.png"))
