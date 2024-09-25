@@ -227,6 +227,8 @@ def image_generation_process(
             inputs.clear()
 
             output_images = stream.ctlimg2img(ctlnet_image=input, keep_latent=keep_latent)
+            if config["FRAME_BUFFER_SIZE"] == 1:
+                output_images = [output_images]
             total_frames += len(output_images)
             print(f"\rtotal {total_frames}", end='', flush=True)
 
