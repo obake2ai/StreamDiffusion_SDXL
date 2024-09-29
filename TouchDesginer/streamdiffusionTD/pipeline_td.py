@@ -1146,6 +1146,9 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                     (image, prev_ctl_image_t_buffer), dim=0
                 )
 
+            if images.shape[2:] != x_t_latent.shape[2:]:
+                images = torch.nn.functional.interpolate(images, size=x_t_latent.shape[2:])
+
             x_0_pred_batch, model_pred = self.unet_step(x_t_latent, t_list, image=images)
 
             if self.denoising_steps_num > 1:
