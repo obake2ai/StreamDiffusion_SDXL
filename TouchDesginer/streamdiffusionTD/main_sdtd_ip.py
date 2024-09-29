@@ -459,10 +459,11 @@ def image_generation_process(
                 # else:
                 #     processed_tensor = stream.stream(input_tensor)
                 #
-                # processed_np = postprocess_image(processed_tensor, output_type="np")
-                # processed_np = (processed_np * 255).astype(np.uint8)
-
                 output_images = stream.ctlimg2img(ctlnet_image=input_tensor, keep_latent=keep_latent)
+
+                processed_np = postprocess_image(processed_tensor, output_type="np")
+                processed_np = (processed_np * 255).astype(np.uint8)
+
 
                 if output_memory is None:
                     output_memory = shared_memory.SharedMemory(name=output_mem_name, create=True, size=processed_np.nbytes)
