@@ -322,6 +322,7 @@ def image_generation_process(
                              torch_dtype=torch.float16)
         pipe.set_ip_adapter_scale(0.8)
 
+    print("tindex:",len(t_index_list))
     stream = StreamDiffusionControlNetSample(
         pipe,
         t_index_list=t_index_list,
