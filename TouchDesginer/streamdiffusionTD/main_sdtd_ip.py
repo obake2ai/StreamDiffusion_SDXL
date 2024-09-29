@@ -511,7 +511,7 @@ def image_generation_process(
                 delta = new_delta
                 negative_prompt = new_negative_prompt
                 update_combined_prompts_and_parameters(
-                    stream.stream,
+                    stream,
                     current_prompt_list,
                     guidance_scale,
                     delta,
@@ -523,24 +523,24 @@ def image_generation_process(
 
 
             #controlnet_weight
-            new_controlnet_conditioning_scale = shared_data.get("controlnet_conditioning_scale", stream.stream.controlnet_conditioning_scale)
-            if new_controlnet_conditioning_scale != stream.stream.controlnet_conditioning_scale:
-                update_controlnet_conditioning_scale(stream.stream, shared_data)
-            new_use_controlnet = shared_data.get("use_controlnet", stream.stream.use_controlnet)
-            if new_use_controlnet != stream.stream.use_controlnet:
-                stream.stream.use_controlnet = new_use_controlnet
+            new_controlnet_conditioning_scale = shared_data.get("controlnet_conditioning_scale", stream.controlnet_conditioning_scale)
+            if new_controlnet_conditioning_scale != stream.controlnet_conditioning_scale:
+                update_controlnet_conditioning_scale(stream, shared_data)
+            new_use_controlnet = shared_data.get("use_controlnet", stream.use_controlnet)
+            if new_use_controlnet != stream.use_controlnet:
+                stream.use_controlnet = new_use_controlnet
             ##SEED DICT
             new_seed_list = shared_data.get("seed_list", current_seed_list)
             if new_seed_list != current_seed_list:
                 current_seed_list = new_seed_list
                 # Check if all weights are zero
                 if any(weight > 0 for _, weight in current_seed_list):
-                    blended_noise = blend_noise_tensors(current_seed_list, noise_bank, stream.stream)
-                    stream.stream.init_noise = blended_noise
+                    blended_noise = blend_noise_tensors(current_seed_list, noise_bank, stream)
+                    stream.init_noise = blended_noise
             ##T_LIST
             new_t_list = shared_data.get("t_list", t_index_list)
-            if new_t_list != stream.stream.t_list:
-                update_t_list_attributes(stream.stream, new_t_list)
+            if new_t_list != stream.t_list:
+                update_t_list_attributes(stream, new_t_list)
             ##STOP STREAM
             if shared_data.get("stop_stream", False):
                 print("Stopping image generation process.")
