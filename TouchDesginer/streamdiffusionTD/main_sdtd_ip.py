@@ -461,7 +461,7 @@ def image_generation_process(
                 #
                 output_images = stream.ctlimg2img(ctlnet_image=input_tensor, keep_latent=keep_latent)
 
-                processed_np = postprocess_image(processed_tensor, output_type="np")
+                processed_np = postprocess_image(output_images, output_type="np")
                 processed_np = (processed_np * 255).astype(np.uint8)
 
 
