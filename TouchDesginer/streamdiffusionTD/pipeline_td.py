@@ -721,12 +721,7 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 device=self.device,
             )
         else:
-            self.x_t_latent_buffer = torch.zeros(
-                (self.frame_bff_size, 4, self.latent_height, self.latent_width),
-                dtype=self.dtype,
-                device=self.device,
-            )
-            #self.x_t_latent_buffer = None
+            self.x_t_latent_buffer = None
 
         encoder_output = self.pipe.encode_prompt(
             prompt=prompt,
@@ -1145,9 +1140,6 @@ class StreamDiffusionControlNetSample(StreamDiffusion):
                 images = torch.cat(
                     (image, prev_ctl_image_t_buffer), dim=0
                 )
-
-            if images.shape[2:] != x_t_latent.shape[2:]:
-                images = torch.nn.functional.interpolate(images, size=x_t_latent.shape[2:])
 
             x_0_pred_batch, model_pred = self.unet_step(x_t_latent, t_list, image=images)
 
