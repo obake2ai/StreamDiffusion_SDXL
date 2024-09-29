@@ -336,7 +336,6 @@ def image_generation_process(
     t_index_list=[0, 25, 40]
 
     while True:
-        print("tindex:",len(t_index_list), t_index_list)
         try:
             # Load controlnet frame if using controlnet
             if use_controlnet:

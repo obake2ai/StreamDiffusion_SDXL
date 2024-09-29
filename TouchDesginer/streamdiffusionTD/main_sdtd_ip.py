@@ -461,15 +461,15 @@ def image_generation_process(
                 #     processed_tensor = stream.stream(input_tensor)
                 #
                 output_images = stream.ctlimg2img(ctlnet_image=input_tensor, keep_latent=keep_latent)
-
-                processed_np = postprocess_image(output_images, output_type="np")
-                processed_np = (processed_np * 255).astype(np.uint8)
-
+                #
+                # processed_np = postprocess_image(output_images, output_type="np")
+                # processed_np = (processed_np * 255).astype(np.uint8)
+                #
 
                 if output_memory is None:
-                    output_memory = shared_memory.SharedMemory(name=output_mem_name, create=True, size=processed_np.nbytes)
-                output_array = np.ndarray(processed_np.shape, dtype=processed_np.dtype, buffer=output_memory.buf)
-                output_array[:] = processed_np[:]
+                    output_memory = shared_memory.SharedMemory(name=output_mem_name, create=True, size=output_images.nbytes)
+                output_array = np.ndarray(output_images.shape, dtype=output_images.dtype, buffer=output_memory.buf)
+                output_array[:] = output_images[:]
 
                 send_osc_message('/framecount', frame_count, osc_transmit_port)
                 start_time, transmit_count = calculate_fps_and_send_osc(start_time, transmit_count, osc_transmit_port, output_mem_name, True, use_controlnet)
