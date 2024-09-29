@@ -25,7 +25,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from wrapper_td import StreamDiffusionWrapper
 #from utils.wrapper import StreamDiffusionWrapper
 
-from pipeline_td import StreamDiffusion
+from pipeline_td import StreamDiffusion, StreamDiffusionControlNetSample
 
 # from compel import Compel
 
