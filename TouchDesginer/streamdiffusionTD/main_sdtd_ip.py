@@ -44,7 +44,7 @@ from pythonosc import udp_client
 import platform
 
 from diffusers import AutoencoderTiny, StableDiffusionPipeline, ControlNetModel, StableDiffusionControlNetPipeline
-
+from transformers import CLIPVisionModelWithProjection
 
 # from ndi_spout_utils import spout_capture, spout_transmit, ndi_capture, ndi_transmit, select_ndi_source
 
