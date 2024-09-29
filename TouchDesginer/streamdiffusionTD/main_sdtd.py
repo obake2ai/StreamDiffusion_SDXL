@@ -333,8 +333,9 @@ def image_generation_process(
     transmit_count = 0
     output_mem_name = f"sd_output_{int(time.time())}"
 
+    t_index_list=[0, 25, 40]
+
     while True:
-        t_index_list=[25, 40]
         print("tindex:",len(t_index_list), t_index_list)
         try:
             # Load controlnet frame if using controlnet
