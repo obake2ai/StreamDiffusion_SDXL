@@ -308,7 +308,7 @@ def image_generation_process(
     current_prompt = prompt
     current_prompt_list = shared_data.get("prompt_list", [[prompt, 1.0]])
     current_seed_list = shared_data.get("seed_list", [[seed, 1.0]])
-    
+
     noise_bank = {}
     prompt_cache = {}
 
@@ -334,6 +334,7 @@ def image_generation_process(
     output_mem_name = f"sd_output_{int(time.time())}"
 
     while True:
+        print("tindex:",len(t_index_list))
         try:
             # Load controlnet frame if using controlnet
             if use_controlnet:
@@ -344,7 +345,7 @@ def image_generation_process(
                         control_memory.close()  # Close the existing shared memory
                         control_memory = None
                     control_mem_name = shared_data['control_mem_name']
-                    
+
 
                 if control_memory is None:
                     try:
@@ -427,9 +428,9 @@ def image_generation_process(
             new_negative_prompt = shared_data.get("negative_prompt", negative_prompt)
             gaussian_prompt = shared_data.get("gaussian_prompt", False)
             # Check if there is an actual change in parameters
-            if (new_prompt_list != current_prompt_list or 
-                new_guidance_scale != guidance_scale or 
-                new_delta != delta or 
+            if (new_prompt_list != current_prompt_list or
+                new_guidance_scale != guidance_scale or
+                new_delta != delta or
                 new_negative_prompt != negative_prompt):
                 # Update the current values
                 current_prompt_list = new_prompt_list
@@ -437,16 +438,16 @@ def image_generation_process(
                 delta = new_delta
                 negative_prompt = new_negative_prompt
                 update_combined_prompts_and_parameters(
-                    stream.stream, 
-                    current_prompt_list, 
-                    guidance_scale, 
-                    delta, 
+                    stream.stream,
+                    current_prompt_list,
+                    guidance_scale,
+                    delta,
                     negative_prompt,
                     prompt_cache,
                     # gaussian_prompt
                 )
                 # print(f"{stream.stream.guidance_scale} - Current Guidance Scale.")
-                
+
 
             #controlnet_weight
             new_controlnet_conditioning_scale = shared_data.get("controlnet_conditioning_scale", stream.stream.controlnet_conditioning_scale)
@@ -489,8 +490,8 @@ def update_t_list_attributes(stream_diffusion_instance, new_t_list):
         stream_diffusion_instance.sub_timesteps, dtype=torch.long, device=stream_diffusion_instance.device
     )
     stream_diffusion_instance.sub_timesteps_tensor = torch.repeat_interleave(
-        sub_timesteps_tensor, 
-        repeats=stream_diffusion_instance.frame_bff_size if stream_diffusion_instance.use_denoising_batch else 1, 
+        sub_timesteps_tensor,
+        repeats=stream_diffusion_instance.frame_bff_size if stream_diffusion_instance.use_denoising_batch else 1,
         dim=0
     )
     c_skip_list = []
