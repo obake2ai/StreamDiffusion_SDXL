@@ -323,6 +323,7 @@ def image_generation_process(
         pipe.set_ip_adapter_scale(0.8)
 
     print("tindex:",len(t_index_list))
+    t_index_list=[25, 40]
     stream = StreamDiffusionControlNetSample(
         pipe,
         t_index_list=t_index_list,
