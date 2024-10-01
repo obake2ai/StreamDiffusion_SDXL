@@ -1117,7 +1117,7 @@ def main(
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
     engine_dir: Optional[Union[str, Path]] = "engines",
-    video_file_path: Optional[str] = "./assets/0710_MPtestsozai.mp4",
+    video_file_path: Optional[str] = "./assets/Shingo_proresHQ_master_4k.mp4",
 ) -> None:
     """
     メイン関数
